@@ -95,27 +95,40 @@ func TestLoadFromFilePath(t *testing.T) {
 	}
 }
 
-func TestMergeGlobalAndRepo(t *testing.T) {
-	age := 14
-	global := Config{
-		Fresh:   FreshConfig{AgeGateDays: &age, FailOn: "warn"},
-		Secrets: SecretsConfig{Tool: "gitleaks"},
+func TestGlobalAndRepoMerge(t *testing.T) {
+	// Set up a temp global config dir.
+	cfgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfgDir)
+	globalDir := filepath.Join(cfgDir, "zick")
+	if err := os.MkdirAll(globalDir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	repoAge := 3
-	repo := Config{
-		Fresh: FreshConfig{AgeGateDays: &repoAge}, // overrides age gate
-		// FailOn not set — global "warn" should survive
-	}
+	writeFile(t, filepath.Join(globalDir, "config.yaml"),
+		"fresh:\n  age_gate_days: 14\n  fail_on: warn\nsecrets:\n  tool: gitleaks\n")
 
-	got := merge(global, repo)
-	if got.Fresh.AgeGateDays == nil || *got.Fresh.AgeGateDays != 3 {
-		t.Fatalf("age_gate_days = %v, want 3 (repo wins)", got.Fresh.AgeGateDays)
+	// Per-repo config overrides only age_gate_days; other fields inherit from global.
+	repoDir := t.TempDir()
+	writeFile(t, filepath.Join(repoDir, ".zick.yaml"), "fresh:\n  age_gate_days: 3\n")
+
+	cfg, err := Load(repoDir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
 	}
-	if got.Fresh.FailOn != "warn" {
-		t.Fatalf("fail_on = %q, want warn (global survives)", got.Fresh.FailOn)
+	if cfg.Fresh.AgeGateDays == nil || *cfg.Fresh.AgeGateDays != 3 {
+		t.Fatalf("age_gate_days = %v, want 3 (repo wins)", cfg.Fresh.AgeGateDays)
 	}
-	if got.Secrets.Tool != "gitleaks" {
-		t.Fatalf("secrets.tool = %q, want gitleaks (global survives)", got.Secrets.Tool)
+	if cfg.Fresh.FailOn != "warn" {
+		t.Fatalf("fail_on = %q, want warn (global survives)", cfg.Fresh.FailOn)
+	}
+	if cfg.Secrets.Tool != "gitleaks" {
+		t.Fatalf("secrets.tool = %q, want gitleaks (global survives)", cfg.Secrets.Tool)
+	}
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

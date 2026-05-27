@@ -5,7 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"gopkg.in/yaml.v3"
+	"github.com/go-viper/mapstructure/v2"
+	"github.com/spf13/viper"
 )
 
 type Config struct {
@@ -52,88 +53,57 @@ type ReportConfig struct {
 //
 // Resolution order (highest to lowest priority):
 //  1. Per-repo .zick.yaml — found by walking up from path
-//  2. Global config — ~/.config/zick/config.yaml (os.UserConfigDir)
+//  2. Global config — os.UserConfigDir()/zick/config.yaml
 //  3. Command flag defaults
 func Load(path string) (Config, error) {
-	global, err := loadGlobal()
-	if err != nil {
-		return Config{}, err
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// Load global config as base layer.
+	if globalPath, err := globalConfigPath(); err == nil {
+		if _, err := os.Stat(globalPath); err == nil {
+			v.SetConfigFile(globalPath)
+			if err := v.ReadInConfig(); err != nil {
+				return Config{}, fmt.Errorf("parse global config: %w", err)
+			}
+		}
 	}
 
+	// Find per-repo config and merge on top.
 	dir := path
 	if info, err := os.Stat(path); err == nil && !info.IsDir() {
 		dir = filepath.Dir(path)
 	}
-
-	configPath, err := findConfig(dir)
+	repoPath, err := findConfig(dir)
 	if err != nil {
 		return Config{}, err
 	}
-	if configPath == "" {
-		return global, nil
+	if repoPath != "" {
+		v.SetConfigFile(repoPath)
+		if err := v.MergeInConfig(); err != nil {
+			return Config{}, fmt.Errorf("parse %s: %w", repoPath, err)
+		}
 	}
 
-	repo, err := parse(configPath)
-	if err != nil {
-		return Config{}, err
+	var cfg Config
+	if err := v.Unmarshal(&cfg, useYAMLTags); err != nil {
+		return Config{}, fmt.Errorf("decode config: %w", err)
 	}
-	return merge(global, repo), nil
+	return cfg, nil
 }
 
-func loadGlobal() (Config, error) {
+// useYAMLTags tells mapstructure to use yaml struct tags for field name
+// mapping so we don't need duplicate mapstructure tags on every field.
+func useYAMLTags(c *mapstructure.DecoderConfig) {
+	c.TagName = "yaml"
+}
+
+func globalConfigPath() (string, error) {
 	cfgDir, err := os.UserConfigDir()
 	if err != nil {
-		return Config{}, nil
+		return "", err
 	}
-	path := filepath.Join(cfgDir, "zick", "config.yaml")
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return Config{}, nil
-	}
-	return parse(path)
-}
-
-// merge returns base with any explicitly-set fields in override applied on top.
-func merge(base, override Config) Config {
-	if override.Fresh.AgeGateDays != nil {
-		base.Fresh.AgeGateDays = override.Fresh.AgeGateDays
-	}
-	if override.Fresh.IncludeDev != nil {
-		base.Fresh.IncludeDev = override.Fresh.IncludeDev
-	}
-	if override.Fresh.FailOn != "" {
-		base.Fresh.FailOn = override.Fresh.FailOn
-	}
-	if override.Fresh.Format != "" {
-		base.Fresh.Format = override.Fresh.Format
-	}
-	if override.Secrets.Tool != "" {
-		base.Secrets.Tool = override.Secrets.Tool
-	}
-	if len(override.Scan.Tools) > 0 {
-		base.Scan.Tools = override.Scan.Tools
-	}
-	if override.Scan.SARIFOutput != "" {
-		base.Scan.SARIFOutput = override.Scan.SARIFOutput
-	}
-	if override.SBOM.Format != "" {
-		base.SBOM.Format = override.SBOM.Format
-	}
-	if override.SBOM.Output != "" {
-		base.SBOM.Output = override.SBOM.Output
-	}
-	if override.Hook.IncludeSecrets != nil {
-		base.Hook.IncludeSecrets = override.Hook.IncludeSecrets
-	}
-	if override.Hook.SecretsTool != "" {
-		base.Hook.SecretsTool = override.Hook.SecretsTool
-	}
-	if override.Report.JSONOutput != "" {
-		base.Report.JSONOutput = override.Report.JSONOutput
-	}
-	if override.Report.HTMLOutput != "" {
-		base.Report.HTMLOutput = override.Report.HTMLOutput
-	}
-	return base
+	return filepath.Join(cfgDir, "zick", "config.yaml"), nil
 }
 
 func findConfig(dir string) (string, error) {
@@ -156,17 +126,4 @@ func findConfig(dir string) (string, error) {
 		}
 		abs = parent
 	}
-}
-
-func parse(path string) (Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return Config{}, fmt.Errorf("read %s: %w", path, err)
-	}
-
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return Config{}, fmt.Errorf("parse %s: %w", path, err)
-	}
-	return cfg, nil
 }
