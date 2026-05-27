@@ -1,9 +1,13 @@
-BIN := bin/zick
+BIN     := bin/zick
+INSTALL := $(HOME)/.local/bin/zick
 
-.PHONY: build test lint clean docs
+.PHONY: build install test lint clean docs
 
 build:
 	go build -o $(BIN) ./cmd/zick
+
+install: build
+	cp $(BIN) $(INSTALL)
 
 test:
 	go test ./...
