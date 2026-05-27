@@ -26,6 +26,7 @@ zick secrets    Scan for leaked secrets (betterleaks / gitleaks)
 zick scan       Run vulnerability scan (osv-scanner / trivy)
 zick sbom       Generate SBOM (syft)
 zick audit      Run fresh, secrets, and scan checks
+zick hook       Install or remove Git hooks
 ```
 
 ## Supply Chain Freshness
@@ -131,6 +132,20 @@ zick audit .
 zick audit --skip-secrets --scan-tools osv-scanner .
 ```
 
+## Git hooks
+
+`zick hook install` installs a managed pre-commit hook in the target Git
+repository. By default the hook runs `zick fresh .`; add `--secrets` to also
+run secret scanning before commits.
+
+```bash
+zick hook install .
+zick hook install --secrets --secrets-tool gitleaks .
+zick hook uninstall .
+```
+
+Existing unmanaged hooks are preserved unless `--force` is passed.
+
 ## Configuration
 
 Place `.zick.yaml` at the project root. All fields are optional.
@@ -152,6 +167,10 @@ scan:
 sbom:
   format: cyclonedx-json
   output: ""
+
+hook:
+  include_secrets: false
+  secrets_tool: auto
 ```
 
 Config discovery walks upward from the target path until it finds `.zick.yaml`.
@@ -214,7 +233,7 @@ Stage 2 - Ecosystem expansion:
 
 Stage 3 - SBOM and audit:
 
-- [ ] Pre-commit hook installer (`zick hook`)
+- [x] Pre-commit hook installer (`zick hook`)
 - [ ] Renovate config audit helper
 
 Stage 4 - Platform:

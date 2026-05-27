@@ -97,6 +97,42 @@ func TestAuditRejectsInvalidScanTool(t *testing.T) {
 	}
 }
 
+func TestHookInstallUsesConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git", "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, ".zick.yaml"), "hook:\n  include_secrets: true\n  secrets_tool: gitleaks\n")
+
+	out, _, err := executeForTest(t, "hook", "install", dir)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !strings.Contains(out, "Installed pre-commit hook") {
+		t.Fatalf("stdout = %q, want install message", out)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".git", "hooks", "pre-commit"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(data), `zick secrets --tool "gitleaks" .`) {
+		t.Fatalf("hook script = %q, want configured secrets tool", string(data))
+	}
+}
+
+func TestHookInstallRejectsInvalidSecretsTool(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git", "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := executeForTest(t, "hook", "install", "--secrets-tool", "detect-secrets", dir)
+	if err == nil || !strings.Contains(err.Error(), "--tool must be one of") {
+		t.Fatalf("error = %v, want invalid secrets tool error", err)
+	}
+}
+
 func TestSplitTools(t *testing.T) {
 	got := splitTools("osv-scanner, trivy,,")
 	if len(got) != 2 || got[0] != "osv-scanner" || got[1] != "trivy" {

@@ -30,11 +30,13 @@ func newRootCmd() *cobra.Command {
 	// Command groups give the help output clear sections as the command set grows.
 	root.AddGroup(
 		&cobra.Group{ID: "scan", Title: "Scanning:"},
+		&cobra.Group{ID: "workflow", Title: "Workflow:"},
 	)
 
 	root.AddCommand(
 		newAuditCmd(),
 		newFreshCmd(),
+		newHookCmd(),
 		newScanCmd(),
 		newSBOMCmd(),
 		newSecretsCmd(),

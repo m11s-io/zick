@@ -13,6 +13,7 @@ type Config struct {
 	Secrets SecretsConfig `yaml:"secrets"`
 	Scan    ScanConfig    `yaml:"scan"`
 	SBOM    SBOMConfig    `yaml:"sbom"`
+	Hook    HookConfig    `yaml:"hook"`
 }
 
 type FreshConfig struct {
@@ -34,6 +35,11 @@ type ScanConfig struct {
 type SBOMConfig struct {
 	Format string `yaml:"format"`
 	Output string `yaml:"output"`
+}
+
+type HookConfig struct {
+	IncludeSecrets *bool  `yaml:"include_secrets"`
+	SecretsTool    string `yaml:"secrets_tool"`
 }
 
 func Load(path string) (Config, error) {

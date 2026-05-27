@@ -19,6 +19,10 @@ secrets:
 
 scan:
   tools: [osv-scanner, trivy]
+
+hook:
+  include_secrets: true
+  secrets_tool: gitleaks
 `
 	if err := os.WriteFile(filepath.Join(dir, ".zick.yaml"), []byte(config), 0o644); err != nil {
 		t.Fatal(err)
@@ -43,6 +47,12 @@ scan:
 	}
 	if len(cfg.Scan.Tools) != 2 || cfg.Scan.Tools[0] != "osv-scanner" || cfg.Scan.Tools[1] != "trivy" {
 		t.Fatalf("scan.tools = %v, want [osv-scanner trivy]", cfg.Scan.Tools)
+	}
+	if cfg.Hook.IncludeSecrets == nil || !*cfg.Hook.IncludeSecrets {
+		t.Fatalf("hook.include_secrets = %v, want true", cfg.Hook.IncludeSecrets)
+	}
+	if cfg.Hook.SecretsTool != "gitleaks" {
+		t.Fatalf("hook.secrets_tool = %q, want gitleaks", cfg.Hook.SecretsTool)
 	}
 }
 

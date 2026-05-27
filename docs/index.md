@@ -26,7 +26,7 @@ zick audit .
 | `zick scan [path]` | Vulnerability scan via osv-scanner and trivy | 1 |
 | `zick sbom [path]` | SBOM generation via syft | 1 |
 | `zick audit [path]` | Full audit: fresh + scan + secrets | 1 |
-| `zick hook install` | Install pre-commit hooks | planned |
+| `zick hook install` | Install pre-commit hooks | 1 |
 | `zick serve` | Run as a REST API service | planned |
 
 ## Supply Chain Freshness
@@ -111,6 +111,20 @@ zick audit .
 zick audit --skip-secrets --scan-tools osv-scanner .
 ```
 
+## Git hooks
+
+`zick hook install` installs a managed pre-commit hook in the target Git
+repository. By default it runs `zick fresh .`; add `--secrets` to run secret
+scanning too.
+
+```bash
+zick hook install .
+zick hook install --secrets --secrets-tool gitleaks .
+zick hook uninstall .
+```
+
+Existing unmanaged hooks are preserved unless `--force` is passed.
+
 ## Configuration
 
 Place `.zick.yaml` at your project root. All fields are optional.
@@ -132,6 +146,10 @@ scan:
 sbom:
   format: cyclonedx-json
   output: ""
+
+hook:
+  include_secrets: false
+  secrets_tool: auto
 ```
 
 Config discovery walks upward from the target path until it finds `.zick.yaml`.
@@ -147,6 +165,7 @@ cmd/zick/
   scan.go         zick scan command
   sbom.go         zick sbom command
   secrets.go      zick secrets command
+  hook.go         zick hook command
 
 internal/
   cli/
@@ -156,6 +175,8 @@ internal/
   fresh/
     npm.go        npm registry client + bun.lock / package-lock.json / package.json parser
     resolver.go   age gate classification
+  hook/
+    hook.go       Git pre-commit hook installer
   tools/
     executor.go   Tool interface + local -> Docker fallback resolver
     betterleaks.go  betterleaks Tool implementation
@@ -170,4 +191,4 @@ internal/
 Next useful work:
 
 - PyPI, crates.io, RubyGems, and Go module freshness checks
-- pre-commit hook installer
+- SARIF normalization and merge output

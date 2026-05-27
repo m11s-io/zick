@@ -17,7 +17,7 @@ scan:
 sbom:
   format: cyclonedx-json    # cyclonedx-json | spdx-json | syft-json
   output: ""                # optional path, e.g. sbom.json
-#
-# sbom:
-#   format: cyclonedx-json   # cyclonedx-json | spdx-json | syft-json
-#   output: sbom.json
+
+hook:
+  include_secrets: false     # run zick secrets in the pre-commit hook
+  secrets_tool: auto         # betterleaks | gitleaks | auto
