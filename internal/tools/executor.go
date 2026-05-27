@@ -7,9 +7,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/m11s-io/zick/internal/cli"
 )
+
+const imagePullInterval = 7 * 24 * time.Hour
 
 // Tool describes a security tool that zick can orchestrate.
 type Tool interface {
@@ -22,7 +26,6 @@ type Tool interface {
 // dockerCacher is an optional interface for tools that need a persistent cache
 // directory mounted into the Docker container (e.g. trivy vulnerability DB).
 type dockerCacher interface {
-	// CacheMount returns the host directory and container path to bind-mount.
 	CacheMount() (hostDir, containerDir string)
 }
 
@@ -89,6 +92,7 @@ func (e *Executor) run(t Tool, path string) error {
 
 	if _, err := exec.LookPath("docker"); err == nil {
 		fmt.Fprintf(e.errOut, "%s not found in PATH — falling back to Docker (%s)\n", t.BinaryName(), t.DockerImage())
+		e.pullIfStale(t.DockerImage())
 		var cacheMount [2]string
 		if dc, ok := t.(dockerCacher); ok {
 			cacheMount[0], cacheMount[1] = dc.CacheMount()
@@ -97,6 +101,34 @@ func (e *Executor) run(t Tool, path string) error {
 	}
 
 	return fmt.Errorf("%s not found locally and Docker is not available.\nInstall %s or Docker to use this command", t.Name(), t.BinaryName())
+}
+
+// pullIfStale pulls the Docker image if it hasn't been pulled in the last 7
+// days. The timestamp is tracked in ~/.cache/zick/. A failed pull is silently
+// ignored so offline use continues to work with the cached image.
+func (e *Executor) pullIfStale(image string) {
+	tsFile := imagePullTimestampPath(image)
+	if info, err := os.Stat(tsFile); err == nil && time.Since(info.ModTime()) < imagePullInterval {
+		return
+	}
+
+	fmt.Fprintf(e.errOut, "pulling %s...\n", image)
+	cmd := exec.Command("docker", "pull", image)
+	cmd.Stdout = e.errOut
+	cmd.Stderr = e.errOut
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(e.errOut, "warning: could not pull %s: %v\n", image, err)
+		return
+	}
+
+	_ = os.MkdirAll(filepath.Dir(tsFile), 0o755)
+	_ = os.WriteFile(tsFile, []byte{}, 0o644)
+}
+
+func imagePullTimestampPath(image string) string {
+	home, _ := os.UserHomeDir()
+	safe := strings.NewReplacer("/", "_", ":", "_").Replace(image)
+	return filepath.Join(home, ".cache", "zick", safe+"-last-pull")
 }
 
 func (e *Executor) runLocal(binary string, args []string) error {
@@ -113,7 +145,7 @@ func (e *Executor) runDocker(image, hostPath string, cacheMount [2]string, args 
 	}
 
 	dockerArgs := []string{
-		"run", "--rm", "--pull", "always",
+		"run", "--rm",
 		"-e", "GIT_CONFIG_COUNT=1",
 		"-e", "GIT_CONFIG_KEY_0=safe.directory",
 		"-e", "GIT_CONFIG_VALUE_0=/src",
