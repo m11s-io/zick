@@ -123,6 +123,9 @@ func TestRunFallsBackToDockerWithAbsoluteMount(t *testing.T) {
 	if !strings.Contains(got, "-v "+repo+":/src") {
 		t.Fatalf("stdout = %q, want absolute Docker mount", got)
 	}
+	if !strings.Contains(got, "GIT_CONFIG_KEY_0=safe.directory") || !strings.Contains(got, "GIT_CONFIG_VALUE_0=/src") {
+		t.Fatalf("stdout = %q, want Git safe.directory Docker env", got)
+	}
 	if !strings.Contains(got, "detect --source /src --no-banner") {
 		t.Fatalf("stdout = %q, want container path args", got)
 	}

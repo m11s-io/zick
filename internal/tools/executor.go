@@ -102,6 +102,9 @@ func (e *Executor) runDocker(image, hostPath string, args []string) error {
 
 	dockerArgs := []string{
 		"run", "--rm",
+		"-e", "GIT_CONFIG_COUNT=1",
+		"-e", "GIT_CONFIG_KEY_0=safe.directory",
+		"-e", "GIT_CONFIG_VALUE_0=/src",
 		"-v", absHostPath + ":/src",
 		image,
 	}
