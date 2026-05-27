@@ -1,5 +1,10 @@
 package tools
 
+import (
+	"os"
+	"path/filepath"
+)
+
 type Trivy struct {
 	SARIFOutput string
 }
@@ -13,4 +18,14 @@ func (t *Trivy) Args(path string) []string {
 		args = append(args, "--format", "sarif", "--output", t.SARIFOutput)
 	}
 	return args
+}
+
+// CacheMount persists the trivy vulnerability DB across Docker runs so it is
+// not re-downloaded on every invocation.
+func (t *Trivy) CacheMount() (string, string) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", ""
+	}
+	return filepath.Join(home, ".cache", "trivy"), "/root/.cache/trivy"
 }

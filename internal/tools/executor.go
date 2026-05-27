@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 
@@ -16,6 +17,13 @@ type Tool interface {
 	BinaryName() string
 	DockerImage() string
 	Args(path string) []string
+}
+
+// dockerCacher is an optional interface for tools that need a persistent cache
+// directory mounted into the Docker container (e.g. trivy vulnerability DB).
+type dockerCacher interface {
+	// CacheMount returns the host directory and container path to bind-mount.
+	CacheMount() (hostDir, containerDir string)
 }
 
 type ScanOptions struct {
@@ -80,8 +88,12 @@ func (e *Executor) run(t Tool, path string) error {
 	}
 
 	if _, err := exec.LookPath("docker"); err == nil {
-		fmt.Fprintf(e.out, "%s not found in PATH — falling back to Docker (%s)\n", t.BinaryName(), t.DockerImage())
-		return e.runDocker(t.DockerImage(), path, t.Args("."))
+		fmt.Fprintf(e.errOut, "%s not found in PATH — falling back to Docker (%s)\n", t.BinaryName(), t.DockerImage())
+		var cacheMount [2]string
+		if dc, ok := t.(dockerCacher); ok {
+			cacheMount[0], cacheMount[1] = dc.CacheMount()
+		}
+		return e.runDocker(t.DockerImage(), path, cacheMount, t.Args("."))
 	}
 
 	return fmt.Errorf("%s not found locally and Docker is not available.\nInstall %s or Docker to use this command", t.Name(), t.BinaryName())
@@ -94,7 +106,7 @@ func (e *Executor) runLocal(binary string, args []string) error {
 	return silentExit(cmd.Run())
 }
 
-func (e *Executor) runDocker(image, hostPath string, args []string) error {
+func (e *Executor) runDocker(image, hostPath string, cacheMount [2]string, args []string) error {
 	absHostPath, err := filepath.Abs(hostPath)
 	if err != nil {
 		return fmt.Errorf("resolve path %s: %w", hostPath, err)
@@ -107,8 +119,15 @@ func (e *Executor) runDocker(image, hostPath string, args []string) error {
 		"-e", "GIT_CONFIG_VALUE_0=/src",
 		"-v", absHostPath + ":/src",
 		"-w", "/src",
-		image,
 	}
+
+	if cacheMount[0] != "" {
+		if err := os.MkdirAll(cacheMount[0], 0o755); err == nil {
+			dockerArgs = append(dockerArgs, "-v", cacheMount[0]+":"+cacheMount[1])
+		}
+	}
+
+	dockerArgs = append(dockerArgs, image)
 	dockerArgs = append(dockerArgs, args...)
 
 	cmd := exec.Command("docker", dockerArgs...)
