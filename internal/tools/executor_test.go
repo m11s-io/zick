@@ -123,10 +123,13 @@ func TestRunFallsBackToDockerWithAbsoluteMount(t *testing.T) {
 	if !strings.Contains(got, "-v "+repo+":/src") {
 		t.Fatalf("stdout = %q, want absolute Docker mount", got)
 	}
+	if !strings.Contains(got, "-w /src") {
+		t.Fatalf("stdout = %q, want container workdir", got)
+	}
 	if !strings.Contains(got, "GIT_CONFIG_KEY_0=safe.directory") || !strings.Contains(got, "GIT_CONFIG_VALUE_0=/src") {
 		t.Fatalf("stdout = %q, want Git safe.directory Docker env", got)
 	}
-	if !strings.Contains(got, "detect --source /src --no-banner") {
+	if !strings.Contains(got, "detect --source . --no-banner") {
 		t.Fatalf("stdout = %q, want container path args", got)
 	}
 }
@@ -159,7 +162,7 @@ func TestRunSecretsAutoFallsBackToBetterleaksDocker(t *testing.T) {
 	if !strings.Contains(got, "ghcr.io/betterleaks/betterleaks:latest") {
 		t.Fatalf("stdout = %q, want betterleaks Docker fallback", got)
 	}
-	if !strings.Contains(got, "git /src") {
+	if !strings.Contains(got, "git .") {
 		t.Fatalf("stdout = %q, want betterleaks git subcommand with container path", got)
 	}
 }

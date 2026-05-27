@@ -81,7 +81,7 @@ func (e *Executor) run(t Tool, path string) error {
 
 	if _, err := exec.LookPath("docker"); err == nil {
 		fmt.Fprintf(e.out, "%s not found in PATH — falling back to Docker (%s)\n", t.BinaryName(), t.DockerImage())
-		return e.runDocker(t.DockerImage(), path, t.Args("/src"))
+		return e.runDocker(t.DockerImage(), path, t.Args("."))
 	}
 
 	return fmt.Errorf("%s not found locally and Docker is not available.\nInstall %s or Docker to use this command", t.Name(), t.BinaryName())
@@ -106,6 +106,7 @@ func (e *Executor) runDocker(image, hostPath string, args []string) error {
 		"-e", "GIT_CONFIG_KEY_0=safe.directory",
 		"-e", "GIT_CONFIG_VALUE_0=/src",
 		"-v", absHostPath + ":/src",
+		"-w", "/src",
 		image,
 	}
 	dockerArgs = append(dockerArgs, args...)
