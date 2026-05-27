@@ -48,7 +48,18 @@ type ReportConfig struct {
 	HTMLOutput string `yaml:"html_output"`
 }
 
+// Load returns the effective config for the given path.
+//
+// Resolution order (highest to lowest priority):
+//  1. Per-repo .zick.yaml — found by walking up from path
+//  2. Global config — ~/.config/zick/config.yaml (os.UserConfigDir)
+//  3. Command flag defaults
 func Load(path string) (Config, error) {
+	global, err := loadGlobal()
+	if err != nil {
+		return Config{}, err
+	}
+
 	dir := path
 	if info, err := os.Stat(path); err == nil && !info.IsDir() {
 		dir = filepath.Dir(path)
@@ -59,10 +70,70 @@ func Load(path string) (Config, error) {
 		return Config{}, err
 	}
 	if configPath == "" {
-		return Config{}, nil
+		return global, nil
 	}
 
-	return parse(configPath)
+	repo, err := parse(configPath)
+	if err != nil {
+		return Config{}, err
+	}
+	return merge(global, repo), nil
+}
+
+func loadGlobal() (Config, error) {
+	cfgDir, err := os.UserConfigDir()
+	if err != nil {
+		return Config{}, nil
+	}
+	path := filepath.Join(cfgDir, "zick", "config.yaml")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return Config{}, nil
+	}
+	return parse(path)
+}
+
+// merge returns base with any explicitly-set fields in override applied on top.
+func merge(base, override Config) Config {
+	if override.Fresh.AgeGateDays != nil {
+		base.Fresh.AgeGateDays = override.Fresh.AgeGateDays
+	}
+	if override.Fresh.IncludeDev != nil {
+		base.Fresh.IncludeDev = override.Fresh.IncludeDev
+	}
+	if override.Fresh.FailOn != "" {
+		base.Fresh.FailOn = override.Fresh.FailOn
+	}
+	if override.Fresh.Format != "" {
+		base.Fresh.Format = override.Fresh.Format
+	}
+	if override.Secrets.Tool != "" {
+		base.Secrets.Tool = override.Secrets.Tool
+	}
+	if len(override.Scan.Tools) > 0 {
+		base.Scan.Tools = override.Scan.Tools
+	}
+	if override.Scan.SARIFOutput != "" {
+		base.Scan.SARIFOutput = override.Scan.SARIFOutput
+	}
+	if override.SBOM.Format != "" {
+		base.SBOM.Format = override.SBOM.Format
+	}
+	if override.SBOM.Output != "" {
+		base.SBOM.Output = override.SBOM.Output
+	}
+	if override.Hook.IncludeSecrets != nil {
+		base.Hook.IncludeSecrets = override.Hook.IncludeSecrets
+	}
+	if override.Hook.SecretsTool != "" {
+		base.Hook.SecretsTool = override.Hook.SecretsTool
+	}
+	if override.Report.JSONOutput != "" {
+		base.Report.JSONOutput = override.Report.JSONOutput
+	}
+	if override.Report.HTMLOutput != "" {
+		base.Report.HTMLOutput = override.Report.HTMLOutput
+	}
+	return base
 }
 
 func findConfig(dir string) (string, error) {

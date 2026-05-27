@@ -95,6 +95,30 @@ func TestLoadFromFilePath(t *testing.T) {
 	}
 }
 
+func TestMergeGlobalAndRepo(t *testing.T) {
+	age := 14
+	global := Config{
+		Fresh:   FreshConfig{AgeGateDays: &age, FailOn: "warn"},
+		Secrets: SecretsConfig{Tool: "gitleaks"},
+	}
+	repoAge := 3
+	repo := Config{
+		Fresh: FreshConfig{AgeGateDays: &repoAge}, // overrides age gate
+		// FailOn not set — global "warn" should survive
+	}
+
+	got := merge(global, repo)
+	if got.Fresh.AgeGateDays == nil || *got.Fresh.AgeGateDays != 3 {
+		t.Fatalf("age_gate_days = %v, want 3 (repo wins)", got.Fresh.AgeGateDays)
+	}
+	if got.Fresh.FailOn != "warn" {
+		t.Fatalf("fail_on = %q, want warn (global survives)", got.Fresh.FailOn)
+	}
+	if got.Secrets.Tool != "gitleaks" {
+		t.Fatalf("secrets.tool = %q, want gitleaks (global survives)", got.Secrets.Tool)
+	}
+}
+
 func TestLoadWalksUpFromNestedPath(t *testing.T) {
 	dir := t.TempDir()
 	nested := filepath.Join(dir, "packages", "app")
