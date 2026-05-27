@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"fmt"
@@ -18,6 +18,14 @@ func newSBOMCmd() *cobra.Command {
 		GroupID: "scan",
 		Long: `Generates a software bill of materials using syft. Resolves execution in
 order: local binary → Docker fallback.`,
+		Example: `  # CycloneDX JSON to stdout (default)
+  zick sbom .
+
+  # SPDX JSON written to a file
+  zick sbom --format spdx-json --output sbom.json .
+
+  # syft native format
+  zick sbom --format syft-json --output sbom.syft.json .`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "."

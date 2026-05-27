@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"bytes"
@@ -30,7 +30,17 @@ func newAuditCmd() *cobra.Command {
 		Use:     "audit [path]",
 		Short:   "Run fresh, secrets, and scan checks",
 		GroupID: "scan",
-		Args:    cobra.MaximumNArgs(1),
+		Long: `Runs all three checks in sequence: dependency freshness, secret scanning,
+and vulnerability scanning. Produces optional JSON and HTML reports.`,
+		Example: `  # full audit of the current directory
+  zick audit .
+
+  # skip secrets, write machine-readable and HTML reports
+  zick audit --skip-secrets --json-output report.json --html-output report.html .
+
+  # only freshness + secrets, strict age gate
+  zick audit --skip-scan --age-gate 3 .`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "."
 			if len(args) > 0 {

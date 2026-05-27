@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"github.com/m11s-io/zick/internal/config"
@@ -11,6 +11,9 @@ func newHookCmd() *cobra.Command {
 		Use:     "hook",
 		Short:   "Install or remove Git hooks",
 		GroupID: "workflow",
+		Example: `  zick hook install .
+  zick hook install --secrets --secrets-tool gitleaks .
+  zick hook uninstall .`,
 	}
 
 	cmd.AddCommand(newHookInstallCmd(), newHookUninstallCmd())
@@ -25,7 +28,19 @@ func newHookInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install [path]",
 		Short: "Install zick pre-commit hook",
-		Args:  cobra.MaximumNArgs(1),
+		Long: `Installs a managed pre-commit hook in the target Git repository.
+By default the hook runs zick fresh; add --secrets to also run secret scanning.
+
+An existing unmanaged hook is left untouched unless --force is passed.`,
+		Example: `  # freshness-only hook (default)
+  zick hook install .
+
+  # include secret scanning with gitleaks
+  zick hook install --secrets --secrets-tool gitleaks .
+
+  # replace an unmanaged hook
+  zick hook install --force .`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "."
 			if len(args) > 0 {
@@ -74,7 +89,10 @@ func newHookUninstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "uninstall [path]",
 		Short: "Remove zick pre-commit hook",
-		Args:  cobra.MaximumNArgs(1),
+		Long:  "Removes the zick-managed pre-commit hook. Fails if the hook is not managed by zick unless --force is passed.",
+		Example: `  zick hook uninstall .
+  zick hook uninstall --force .`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "."
 			if len(args) > 0 {

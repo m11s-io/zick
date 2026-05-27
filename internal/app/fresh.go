@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"encoding/json"
@@ -28,6 +28,14 @@ published within the configured age gate. Helps catch supply chain attacks
 before packages are installed.
 
 Reads bun.lock, pnpm-lock.yaml, yarn.lock, package-lock.json, or package.json.`,
+		Example: `  # check current directory with the default 7-day gate
+  zick fresh .
+
+  # stricter gate, include devDependencies, JSON output
+  zick fresh --age-gate 3 --include-dev --format json .
+
+  # exit 1 on any package below the warn threshold
+  zick fresh --fail-on warn .`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "."

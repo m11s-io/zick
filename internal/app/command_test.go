@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ import (
 func executeForTest(t *testing.T, args ...string) (string, string, error) {
 	t.Helper()
 
-	cmd := newRootCmd()
+	cmd := NewRootCmd("")
 	var out, errOut bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)

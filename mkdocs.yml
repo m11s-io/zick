@@ -25,3 +25,13 @@ theme:
 
 nav:
   - Home: index.md
+  - CLI Reference:
+    - cli/zick.md
+    - cli/zick_audit.md
+    - cli/zick_fresh.md
+    - cli/zick_scan.md
+    - cli/zick_sbom.md
+    - cli/zick_secrets.md
+    - cli/zick_hook.md
+    - cli/zick_hook_install.md
+    - cli/zick_hook_uninstall.md

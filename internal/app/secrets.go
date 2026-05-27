@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"fmt"
@@ -19,6 +19,14 @@ func newSecretsCmd() *cobra.Command {
 order: local binary → Docker fallback.
 
 Supported tools: betterleaks, gitleaks, auto (default: tries betterleaks first)`,
+		Example: `  # auto-select scanner
+  zick secrets .
+
+  # force gitleaks
+  zick secrets --tool gitleaks .
+
+  # force betterleaks
+  zick secrets --tool betterleaks .`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "."

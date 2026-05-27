@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"fmt"
@@ -21,6 +21,14 @@ func newScanCmd() *cobra.Command {
 in order: local binary → Docker fallback.
 
 Supported tools: osv-scanner, trivy`,
+		Example: `  # run both default scanners
+  zick scan .
+
+  # osv-scanner only, write SARIF output
+  zick scan --tools osv-scanner --sarif-output results.sarif .
+
+  # trivy only
+  zick scan --tools trivy .`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "."
@@ -57,14 +65,14 @@ Supported tools: osv-scanner, trivy`,
 
 func splitTools(value string) []string {
 	parts := strings.Split(value, ",")
-	tools := make([]string, 0, len(parts))
+	result := make([]string, 0, len(parts))
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if part != "" {
-			tools = append(tools, part)
+			result = append(result, part)
 		}
 	}
-	return tools
+	return result
 }
 
 func validateScanTools(scanTools []string) error {
