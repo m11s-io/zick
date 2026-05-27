@@ -23,6 +23,10 @@ scan:
 hook:
   include_secrets: true
   secrets_tool: gitleaks
+
+report:
+  json_output: zick-report.json
+  html_output: zick-report.html
 `
 	if err := os.WriteFile(filepath.Join(dir, ".zick.yaml"), []byte(config), 0o644); err != nil {
 		t.Fatal(err)
@@ -53,6 +57,12 @@ hook:
 	}
 	if cfg.Hook.SecretsTool != "gitleaks" {
 		t.Fatalf("hook.secrets_tool = %q, want gitleaks", cfg.Hook.SecretsTool)
+	}
+	if cfg.Report.JSONOutput != "zick-report.json" {
+		t.Fatalf("report.json_output = %q, want zick-report.json", cfg.Report.JSONOutput)
+	}
+	if cfg.Report.HTMLOutput != "zick-report.html" {
+		t.Fatalf("report.html_output = %q, want zick-report.html", cfg.Report.HTMLOutput)
 	}
 }
 

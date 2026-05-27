@@ -97,6 +97,36 @@ func TestAuditRejectsInvalidScanTool(t *testing.T) {
 	}
 }
 
+func TestAuditWritesReports(t *testing.T) {
+	dir := t.TempDir()
+	jsonPath := filepath.Join(dir, "zick-report.json")
+	htmlPath := filepath.Join(dir, "zick-report.html")
+
+	out, _, err := executeForTest(t, "audit", "--skip-secrets", "--skip-scan", "--json-output", jsonPath, "--html-output", htmlPath, dir)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !strings.Contains(out, "Wrote JSON report") || !strings.Contains(out, "Wrote HTML report") {
+		t.Fatalf("stdout = %q, want report messages", out)
+	}
+
+	jsonData, err := os.ReadFile(jsonPath)
+	if err != nil {
+		t.Fatalf("ReadFile json: %v", err)
+	}
+	if !strings.Contains(string(jsonData), `"schema_version": "1"`) || !strings.Contains(string(jsonData), `"no_manifest": true`) {
+		t.Fatalf("json report = %s, want schema and no manifest", string(jsonData))
+	}
+
+	htmlData, err := os.ReadFile(htmlPath)
+	if err != nil {
+		t.Fatalf("ReadFile html: %v", err)
+	}
+	if !strings.Contains(string(htmlData), "zick report") {
+		t.Fatalf("html report = %s, want zick report", string(htmlData))
+	}
+}
+
 func TestHookInstallUsesConfig(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".git", "hooks"), 0o755); err != nil {

@@ -14,6 +14,7 @@ type Config struct {
 	Scan    ScanConfig    `yaml:"scan"`
 	SBOM    SBOMConfig    `yaml:"sbom"`
 	Hook    HookConfig    `yaml:"hook"`
+	Report  ReportConfig  `yaml:"report"`
 }
 
 type FreshConfig struct {
@@ -40,6 +41,11 @@ type SBOMConfig struct {
 type HookConfig struct {
 	IncludeSecrets *bool  `yaml:"include_secrets"`
 	SecretsTool    string `yaml:"secrets_tool"`
+}
+
+type ReportConfig struct {
+	JSONOutput string `yaml:"json_output"`
+	HTMLOutput string `yaml:"html_output"`
 }
 
 func Load(path string) (Config, error) {

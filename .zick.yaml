@@ -21,3 +21,7 @@ sbom:
 hook:
   include_secrets: false     # run zick secrets in the pre-commit hook
   secrets_tool: auto         # betterleaks | gitleaks | auto
+
+report:
+  json_output: ""            # optional path, e.g. zick-report.json
+  html_output: ""            # optional path, e.g. zick-report.html

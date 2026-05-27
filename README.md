@@ -130,7 +130,11 @@ Supported formats:
 ```bash
 zick audit .
 zick audit --skip-secrets --scan-tools osv-scanner .
+zick audit --json-output zick-report.json --html-output zick-report.html .
 ```
+
+Audit reports are useful as CI artifacts and local review files. The HTML report
+is self-contained and can be opened directly in a browser.
 
 ## Git hooks
 
@@ -171,6 +175,10 @@ sbom:
 hook:
   include_secrets: false
   secrets_tool: auto
+
+report:
+  json_output: ""
+  html_output: ""
 ```
 
 Config discovery walks upward from the target path until it finds `.zick.yaml`.
@@ -187,6 +195,8 @@ Command-line flags override config values.
     secrets_tool: auto
     scan_tools: osv-scanner,trivy
     sarif_output: zick.sarif
+    json_output: zick-report.json
+    html_output: zick-report.html
 ```
 
 ## Installation
@@ -220,6 +230,7 @@ Stage 1 - CLI foundation and freshness:
 - [x] `zick scan` with osv-scanner and trivy
 - [x] `zick sbom` with syft
 - [x] `zick audit` combining fresh, secrets, and scan
+- [x] JSON and self-contained HTML audit reports
 - [x] SARIF output wiring for scan
 - [x] yarn.lock / pnpm-lock.yaml freshness parsing
 - [x] GitHub Actions workflow (`zick-action`)
@@ -257,12 +268,17 @@ cmd/
     scan.go         zick scan command
     sbom.go         zick sbom command
     secrets.go      zick secrets command
+    hook.go         zick hook command
 internal/
   config/
     config.go       .zick.yaml loader
   fresh/
     npm.go          npm registry client + lockfile parsing
     resolver.go     age gate classification
+  hook/
+    hook.go         Git pre-commit hook installer
+  report/
+    report.go       JSON and self-contained HTML audit reports
   tools/
     executor.go     local -> Docker fallback resolution
     betterleaks.go  betterleaks integration

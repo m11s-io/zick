@@ -109,7 +109,11 @@ Supported formats:
 ```bash
 zick audit .
 zick audit --skip-secrets --scan-tools osv-scanner .
+zick audit --json-output zick-report.json --html-output zick-report.html .
 ```
+
+Audit reports are useful as CI artifacts and local review files. The HTML report
+is self-contained and can be opened directly in a browser.
 
 ## Git hooks
 
@@ -150,6 +154,10 @@ sbom:
 hook:
   include_secrets: false
   secrets_tool: auto
+
+report:
+  json_output: ""
+  html_output: ""
 ```
 
 Config discovery walks upward from the target path until it finds `.zick.yaml`.
@@ -177,6 +185,8 @@ internal/
     resolver.go   age gate classification
   hook/
     hook.go       Git pre-commit hook installer
+  report/
+    report.go     JSON and self-contained HTML audit reports
   tools/
     executor.go   Tool interface + local -> Docker fallback resolver
     betterleaks.go  betterleaks Tool implementation

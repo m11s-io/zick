@@ -47,6 +47,14 @@ inputs:
     description: "Write SBOM to this file"
     default: ""
     required: false
+  json_output:
+    description: "Write audit report JSON to this path"
+    default: ""
+    required: false
+  html_output:
+    description: "Write audit report HTML to this path"
+    default: ""
+    required: false
   path:
     description: "Path to scan"
     default: "."
@@ -128,6 +136,10 @@ runs:
       run: |
         SARIF_FLAG=""
         [ -n "${{ inputs.sarif_output }}" ] && SARIF_FLAG="--sarif-output ${{ inputs.sarif_output }}"
+        JSON_FLAG=""
+        [ -n "${{ inputs.json_output }}" ] && JSON_FLAG="--json-output ${{ inputs.json_output }}"
+        HTML_FLAG=""
+        [ -n "${{ inputs.html_output }}" ] && HTML_FLAG="--html-output ${{ inputs.html_output }}"
         DEV_FLAG=""
         [ "${{ inputs.include_dev }}" = "true" ] && DEV_FLAG="--include-dev"
         zick audit \
@@ -136,5 +148,7 @@ runs:
           --secrets-tool "${{ inputs.secrets_tool }}" \
           --scan-tools "${{ inputs.scan_tools }}" \
           $SARIF_FLAG \
+          $JSON_FLAG \
+          $HTML_FLAG \
           $DEV_FLAG \
           "${{ inputs.path }}"
