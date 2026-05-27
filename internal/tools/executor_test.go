@@ -151,6 +151,9 @@ func TestRunSecretsAutoFallsBackToBetterleaksDocker(t *testing.T) {
 	if !strings.Contains(got, "ghcr.io/betterleaks/betterleaks:latest") {
 		t.Fatalf("stdout = %q, want betterleaks Docker fallback", got)
 	}
+	if !strings.Contains(got, "git /src") {
+		t.Fatalf("stdout = %q, want betterleaks git subcommand with container path", got)
+	}
 }
 
 func TestRunReturnsSilentErrorForToolExitCode(t *testing.T) {
