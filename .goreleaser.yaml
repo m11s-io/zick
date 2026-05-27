@@ -1,0 +1,84 @@
+version: 2
+
+project_name: zick
+
+builds:
+  - id: zick
+    main: ./cmd/zick
+    binary: zick
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: zick
+    builds: [zick]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+
+dockers:
+  - id: zick-amd64
+    ids: [zick]
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "ghcr.io/m11s-io/zick:{{ .Tag }}-amd64"
+      - "ghcr.io/m11s-io/zick:latest-amd64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+
+  - id: zick-arm64
+    ids: [zick]
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "ghcr.io/m11s-io/zick:{{ .Tag }}-arm64"
+      - "ghcr.io/m11s-io/zick:latest-arm64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+
+docker_manifests:
+  - name_template: "ghcr.io/m11s-io/zick:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/m11s-io/zick:{{ .Tag }}-amd64"
+      - "ghcr.io/m11s-io/zick:{{ .Tag }}-arm64"
+
+  - name_template: "ghcr.io/m11s-io/zick:latest"
+    image_templates:
+      - "ghcr.io/m11s-io/zick:latest-amd64"
+      - "ghcr.io/m11s-io/zick:latest-arm64"

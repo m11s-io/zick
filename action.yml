@@ -1,0 +1,72 @@
+name: "zick"
+description: "Developer-first security scanning — supply chain freshness, secrets, and more"
+author: "m11s-io"
+
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  commands:
+    description: "Comma-separated list of commands to run (fresh, secrets)"
+    default: "fresh,secrets"
+    required: false
+  age_gate_days:
+    description: "Number of days for freshness age gate"
+    default: "7"
+    required: false
+  fail_on:
+    description: "Risk level to fail on (high, warn)"
+    default: "high"
+    required: false
+  include_dev:
+    description: "Include devDependencies in freshness check"
+    default: "false"
+    required: false
+  path:
+    description: "Path to scan"
+    default: "."
+    required: false
+  version:
+    description: "zick version to use (default: latest)"
+    default: "latest"
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Install zick
+      shell: bash
+      run: |
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+        [ "$ARCH" = "x86_64" ] && ARCH="amd64"
+        [ "$ARCH" = "aarch64" ] && ARCH="arm64"
+
+        VERSION="${{ inputs.version }}"
+        if [ "$VERSION" = "latest" ]; then
+          VERSION=$(curl -s https://api.github.com/repos/m11s-io/zick/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+        fi
+
+        URL="https://github.com/m11s-io/zick/releases/download/${VERSION}/zick_${OS}_${ARCH}.tar.gz"
+        curl -sSL "$URL" | tar -xz -C /usr/local/bin zick
+        chmod +x /usr/local/bin/zick
+        zick --version
+
+    - name: Run zick fresh
+      if: contains(inputs.commands, 'fresh')
+      shell: bash
+      run: |
+        DEV_FLAG=""
+        [ "${{ inputs.include_dev }}" = "true" ] && DEV_FLAG="--include-dev"
+        zick fresh \
+          --age-gate "${{ inputs.age_gate_days }}" \
+          --fail-on "${{ inputs.fail_on }}" \
+          $DEV_FLAG \
+          "${{ inputs.path }}"
+
+    - name: Run zick secrets
+      if: contains(inputs.commands, 'secrets')
+      shell: bash
+      run: |
+        zick secrets "${{ inputs.path }}"
