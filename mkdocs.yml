@@ -1,0 +1,27 @@
+site_name: zick
+site_url: https://zick.m11s.io
+site_description: zick documentation
+repo_url: https://github.com/m11s-io/zick
+repo_name: m11s-io/zick
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Home: index.md
