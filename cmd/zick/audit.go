@@ -113,6 +113,7 @@ func newAuditCmd() *cobra.Command {
 					Results:     report.FreshResults(results),
 				}
 				if len(results) == 0 {
+					rep.Fresh.Status = "skipped"
 					rep.Fresh.NoManifest = true
 					cmd.Println("No supported manifest found (bun.lock, pnpm-lock.yaml, yarn.lock, package-lock.json, package.json).")
 				} else {
@@ -133,7 +134,7 @@ func newAuditCmd() *cobra.Command {
 				secretsStarted := time.Now()
 				var out bytes.Buffer
 				cmd.Println("== secrets ==")
-				executor := tools.NewExecutor(io.MultiWriter(cmd.OutOrStdout(), &out), cmd.ErrOrStderr())
+				executor := tools.NewExecutor(io.MultiWriter(cmd.OutOrStdout(), &out), io.MultiWriter(cmd.ErrOrStderr(), &out))
 				if err := executor.RunSecrets(path, secretsTool); err != nil {
 					rep.Secrets = report.ToolSection{
 						Status:   "failed",
@@ -160,7 +161,7 @@ func newAuditCmd() *cobra.Command {
 				scanStarted := time.Now()
 				var out bytes.Buffer
 				cmd.Println("== scan ==")
-				executor := tools.NewExecutor(io.MultiWriter(cmd.OutOrStdout(), &out), cmd.ErrOrStderr())
+				executor := tools.NewExecutor(io.MultiWriter(cmd.OutOrStdout(), &out), io.MultiWriter(cmd.ErrOrStderr(), &out))
 				if err := executor.RunScan(path, scanTools, tools.ScanOptions{SARIFOutput: sarifOutput}); err != nil {
 					rep.Scan = report.ToolSection{
 						Status:   "failed",

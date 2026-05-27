@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/m11s-io/zick/internal/cli"
 	"github.com/m11s-io/zick/internal/fresh"
 	"github.com/spf13/cobra"
 )
@@ -114,7 +117,8 @@ func TestAuditWritesReports(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile json: %v", err)
 	}
-	if !strings.Contains(string(jsonData), `"schema_version": "1"`) || !strings.Contains(string(jsonData), `"no_manifest": true`) {
+	if !strings.Contains(string(jsonData), `"schema_version": "1"`) || !strings.Contains(string(jsonData), `"no_manifest": true`) || !strings.Contains(string(jsonData), `"fresh": {
+    "status": "skipped"`) {
 		t.Fatalf("json report = %s, want schema and no manifest", string(jsonData))
 	}
 
@@ -124,6 +128,37 @@ func TestAuditWritesReports(t *testing.T) {
 	}
 	if !strings.Contains(string(htmlData), "zick report") {
 		t.Fatalf("html report = %s, want zick report", string(htmlData))
+	}
+}
+
+func TestAuditReportCapturesToolStderr(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper shell script is POSIX-only")
+	}
+
+	binDir := t.TempDir()
+	writeFile(t, filepath.Join(binDir, "betterleaks"), "#!/bin/sh\necho 'leaks found: 5' >&2\nexit 1\n")
+	if err := os.Chmod(filepath.Join(binDir, "betterleaks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir)
+
+	dir := t.TempDir()
+	jsonPath := filepath.Join(dir, "zick-report.json")
+
+	_, _, err := executeForTest(t, "audit", "--skip-scan", "--secrets-tool", "betterleaks", "--json-output", jsonPath, dir)
+	var silent *cli.SilentError
+	if !errors.As(err, &silent) || silent.Code != 1 {
+		t.Fatalf("error = %v, want SilentError code 1", err)
+	}
+
+	jsonData, err := os.ReadFile(jsonPath)
+	if err != nil {
+		t.Fatalf("ReadFile json: %v", err)
+	}
+	got := string(jsonData)
+	if !strings.Contains(got, `"status": "failed"`) || !strings.Contains(got, `leaks found: 5`) {
+		t.Fatalf("json report = %s, want failed status and stderr output", got)
 	}
 }
 
