@@ -1,10 +1,13 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/m11s-io/zick/internal/cli"
 )
 
 // Tool describes a security tool that zick can orchestrate.
@@ -37,18 +40,14 @@ func NewExecutor(out, errOut io.Writer) *Executor {
 }
 
 func (e *Executor) RunSecrets(path, toolName string) error {
-	var t Tool
-
 	switch toolName {
 	case "betterleaks":
-		t = &Betterleaks{}
+		return e.run(&Betterleaks{}, path)
 	case "gitleaks":
-		t = &Gitleaks{}
+		return e.run(&Gitleaks{}, path)
 	default: // "auto"
-		t = &Betterleaks{}
+		return e.run(&Betterleaks{}, path)
 	}
-
-	return e.run(t, path)
 }
 
 func (e *Executor) RunScan(path string, toolNames []string, opts ScanOptions) error {
@@ -92,7 +91,7 @@ func (e *Executor) runLocal(binary string, args []string) error {
 	cmd := exec.Command(binary, args...)
 	cmd.Stdout = e.out
 	cmd.Stderr = e.errOut
-	return cmd.Run()
+	return silentExit(cmd.Run())
 }
 
 func (e *Executor) runDocker(image, hostPath string, args []string) error {
@@ -111,5 +110,17 @@ func (e *Executor) runDocker(image, hostPath string, args []string) error {
 	cmd := exec.Command("docker", dockerArgs...)
 	cmd.Stdout = e.out
 	cmd.Stderr = e.errOut
-	return cmd.Run()
+	return silentExit(cmd.Run())
+}
+
+func silentExit(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return &cli.SilentError{Code: exitErr.ExitCode()}
+	}
+	return err
 }

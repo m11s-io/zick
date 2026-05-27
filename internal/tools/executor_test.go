@@ -2,11 +2,14 @@ package tools
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/m11s-io/zick/internal/cli"
 )
 
 func TestRunSecretsUsesLocalGitleaks(t *testing.T) {
@@ -122,6 +125,50 @@ func TestRunFallsBackToDockerWithAbsoluteMount(t *testing.T) {
 	}
 	if !strings.Contains(got, "detect --source /src --no-banner") {
 		t.Fatalf("stdout = %q, want container path args", got)
+	}
+}
+
+func TestRunSecretsAutoFallsBackToBetterleaksDocker(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper shell script is POSIX-only")
+	}
+
+	dir := t.TempDir()
+	docker := filepath.Join(dir, "docker")
+	writeExecutable(t, docker, "#!/bin/sh\necho docker \"$@\"\n")
+	t.Setenv("PATH", dir)
+
+	var out, errOut bytes.Buffer
+	executor := NewExecutor(&out, &errOut)
+	if err := executor.RunSecrets("/repo", "auto"); err != nil {
+		t.Fatalf("RunSecrets: %v", err)
+	}
+
+	got := out.String()
+	if strings.Contains(got, "ghcr.io/smartbugs/betterleaks") {
+		t.Fatalf("stdout = %q, should not use deprecated betterleaks Docker image", got)
+	}
+	if !strings.Contains(got, "ghcr.io/betterleaks/betterleaks:latest") {
+		t.Fatalf("stdout = %q, want betterleaks Docker fallback", got)
+	}
+}
+
+func TestRunReturnsSilentErrorForToolExitCode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper shell script is POSIX-only")
+	}
+
+	dir := t.TempDir()
+	writeExecutable(t, filepath.Join(dir, "gitleaks"), "#!/bin/sh\nexit 1\n")
+	t.Setenv("PATH", dir)
+
+	var out, errOut bytes.Buffer
+	executor := NewExecutor(&out, &errOut)
+	err := executor.RunSecrets("/repo", "gitleaks")
+
+	var silent *cli.SilentError
+	if !errors.As(err, &silent) || silent.Code != 1 {
+		t.Fatalf("error = %v, want SilentError code 1", err)
 	}
 }
 
