@@ -1,12 +1,13 @@
 # zick
 
-> Developer-first supply-chain and secret scanning CLI.
+> Developer-first supply-chain security CLI.
 
-zick currently provides three local developer checks:
+zick currently provides local developer checks for:
 
 - dependency publish-age checks for npm-compatible projects
 - secret scanning through betterleaks or gitleaks
 - vulnerability scanning through osv-scanner or trivy
+- SBOM generation through syft
 
 ## Why zick
 
@@ -23,6 +24,8 @@ scanners, using an installed tool when available and Docker as a fallback.
 zick fresh      Check dependencies for supply chain risk (freshness age gate)
 zick secrets    Scan for leaked secrets (betterleaks / gitleaks)
 zick scan       Run vulnerability scan (osv-scanner / trivy)
+zick sbom       Generate SBOM (syft)
+zick audit      Run fresh, secrets, and scan checks
 ```
 
 ## Supply Chain Freshness
@@ -34,6 +37,8 @@ dependencies published within a configurable age window. The default age gate is
 Supported inputs:
 
 - `bun.lock`
+- `pnpm-lock.yaml`
+- `yarn.lock`
 - `package-lock.json`
 - `package.json`
 
@@ -92,6 +97,7 @@ For external tools, zick resolves execution in order:
 zick scan .
 zick scan --tools osv-scanner .
 zick scan --tools osv-scanner,trivy .
+zick scan --sarif-output zick.sarif .
 ```
 
 Supported scanners:
@@ -100,6 +106,30 @@ Supported scanners:
 - `trivy`
 
 Like secret scanning, zick uses a local binary first and falls back to Docker.
+
+## SBOM Generation
+
+`zick sbom` generates a software bill of materials with syft.
+
+```bash
+zick sbom .
+zick sbom --format spdx-json --output sbom.json .
+```
+
+Supported formats:
+
+- `cyclonedx-json`
+- `spdx-json`
+- `syft-json`
+
+## Audit
+
+`zick audit` runs `fresh`, `secrets`, and `scan` in one command.
+
+```bash
+zick audit .
+zick audit --skip-secrets --scan-tools osv-scanner .
+```
 
 ## Configuration
 
@@ -117,20 +147,27 @@ secrets:
 
 scan:
   tools: [osv-scanner, trivy]
+  sarif_output: ""
+
+sbom:
+  format: cyclonedx-json
+  output: ""
 ```
 
-Command-line flags override `.zick.yaml`.
+Config discovery walks upward from the target path until it finds `.zick.yaml`.
+Command-line flags override config values.
 
 ## GitHub Actions
 
 ```yaml
 - uses: m11s-io/zick-action@v1
   with:
-    commands: fresh,secrets,scan
+    commands: audit
     age_gate_days: 7
     fail_on: high
     secrets_tool: auto
     scan_tools: osv-scanner,trivy
+    sarif_output: zick.sarif
 ```
 
 ## Installation
@@ -162,23 +199,23 @@ Stage 1 - CLI foundation and freshness:
 - [x] `.zick.yaml` for `fresh` and `secrets`
 - [x] `zick secrets` with betterleaks and gitleaks
 - [x] `zick scan` with osv-scanner and trivy
+- [x] `zick sbom` with syft
+- [x] `zick audit` combining fresh, secrets, and scan
+- [x] SARIF output wiring for scan
+- [x] yarn.lock / pnpm-lock.yaml freshness parsing
 - [x] GitHub Actions workflow (`zick-action`)
 - [x] GitHub Action local smoke workflow
 - [x] Single binary release configuration via GoReleaser
 - [x] Docker image release configuration for `ghcr.io/m11s-io/zick`
 
-Stage 2 - Vulnerability scanning:
+Stage 2 - Ecosystem expansion:
 
 - [ ] Multi-ecosystem freshness: PyPI, crates.io, RubyGems, Go
-- [ ] SARIF output for GitHub Security tab
 
 Stage 3 - SBOM and audit:
 
-- [ ] syft integration (`zick sbom`)
-- [ ] `zick audit` combining all checks
 - [ ] Pre-commit hook installer (`zick hook`)
 - [ ] Renovate config audit helper
-- [ ] yarn.lock / pnpm-lock.yaml parsing
 
 Stage 4 - Platform:
 
@@ -196,8 +233,10 @@ zick is built on Go + Cobra.
 cmd/
   zick/
     main.go         root command + execute
+    audit.go        zick audit command
     fresh.go        zick fresh command
     scan.go         zick scan command
+    sbom.go         zick sbom command
     secrets.go      zick secrets command
 internal/
   config/
@@ -210,6 +249,7 @@ internal/
     betterleaks.go  betterleaks integration
     gitleaks.go     gitleaks integration
     osvscanner.go   osv-scanner integration
+    syft.go         syft integration
     trivy.go        trivy integration
 ```
 

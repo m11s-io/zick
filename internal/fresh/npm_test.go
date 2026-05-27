@@ -362,6 +362,76 @@ func TestParseBunLock(t *testing.T) {
 	}
 }
 
+func TestParsePnpmLock(t *testing.T) {
+	lock := `lockfileVersion: '9.0'
+packages:
+  lodash@4.17.21: {}
+  /left-pad@1.3.0: {}
+  /@types/node@20.0.0: {}
+  /react@19.0.0(peer@1.0.0): {}
+`
+	path := filepath.Join(t.TempDir(), "pnpm-lock.yaml")
+	if err := os.WriteFile(path, []byte(lock), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	deps, err := parsePnpmLock(path)
+	if err != nil {
+		t.Fatalf("parsePnpmLock: %v", err)
+	}
+
+	byName := make(map[string]string, len(deps))
+	for _, d := range deps {
+		byName[d.name] = d.version
+	}
+	if byName["lodash"] != "4.17.21" {
+		t.Errorf("lodash version = %q, want 4.17.21", byName["lodash"])
+	}
+	if byName["left-pad"] != "1.3.0" {
+		t.Errorf("left-pad version = %q, want 1.3.0", byName["left-pad"])
+	}
+	if byName["@types/node"] != "20.0.0" {
+		t.Errorf("@types/node version = %q, want 20.0.0", byName["@types/node"])
+	}
+	if byName["react"] != "19.0.0" {
+		t.Errorf("react version = %q, want 19.0.0", byName["react"])
+	}
+}
+
+func TestParseYarnLock(t *testing.T) {
+	lock := `# yarn lockfile v1
+"lodash@^4.17.21", lodash@~4.17.20:
+  version "4.17.21"
+  resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.21.tgz"
+
+"@types/node@^20.0.0":
+  version "20.0.0"
+`
+	path := filepath.Join(t.TempDir(), "yarn.lock")
+	if err := os.WriteFile(path, []byte(lock), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	deps, err := parseYarnLock(path)
+	if err != nil {
+		t.Fatalf("parseYarnLock: %v", err)
+	}
+
+	byName := make(map[string]string, len(deps))
+	for _, d := range deps {
+		byName[d.name] = d.version
+	}
+	if byName["lodash"] != "4.17.21" {
+		t.Errorf("lodash version = %q, want 4.17.21", byName["lodash"])
+	}
+	if byName["@types/node"] != "20.0.0" {
+		t.Errorf("@types/node version = %q, want 20.0.0", byName["@types/node"])
+	}
+	if len(deps) != 2 {
+		t.Errorf("expected 2 deduped deps, got %d: %+v", len(deps), deps)
+	}
+}
+
 func TestSplitBunPkgKey(t *testing.T) {
 	tests := []struct {
 		key         string

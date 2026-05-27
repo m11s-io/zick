@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -91,6 +93,12 @@ func resolveDeps(path string, includeDev bool) ([]dep, error) {
 	// bun.lock covers the entire workspace with exact versions — prefer it.
 	if _, err := os.Stat(filepath.Join(path, "bun.lock")); err == nil {
 		return parseBunLock(filepath.Join(path, "bun.lock"))
+	}
+	if _, err := os.Stat(filepath.Join(path, "pnpm-lock.yaml")); err == nil {
+		return parsePnpmLock(filepath.Join(path, "pnpm-lock.yaml"))
+	}
+	if _, err := os.Stat(filepath.Join(path, "yarn.lock")); err == nil {
+		return parseYarnLock(filepath.Join(path, "yarn.lock"))
 	}
 	if _, err := os.Stat(filepath.Join(path, "package-lock.json")); err == nil {
 		return parseLock(filepath.Join(path, "package-lock.json"), includeDev)
@@ -212,6 +220,112 @@ func parsePkg(path string, includeDev bool) ([]dep, error) {
 		}
 	}
 	return deps, nil
+}
+
+type pnpmLock struct {
+	Packages map[string]any `yaml:"packages"`
+}
+
+func parsePnpmLock(path string) ([]dep, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+
+	var lock pnpmLock
+	if err := yaml.Unmarshal(data, &lock); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+
+	seen := make(map[string]struct{}, len(lock.Packages))
+	deps := make([]dep, 0, len(lock.Packages))
+	for key := range lock.Packages {
+		name, version, ok := splitPnpmPackageKey(key)
+		if !ok {
+			continue
+		}
+		id := name + "@" + version
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		deps = append(deps, dep{name: name, version: version})
+	}
+	return deps, nil
+}
+
+func splitPnpmPackageKey(key string) (name, version string, ok bool) {
+	key = strings.TrimPrefix(key, "/")
+	if key == "" || strings.HasPrefix(key, "file:") || strings.HasPrefix(key, "link:") {
+		return "", "", false
+	}
+	if idx := strings.Index(key, "("); idx >= 0 {
+		key = key[:idx]
+	}
+
+	idx := strings.LastIndex(key, "@")
+	if idx <= 0 || idx == len(key)-1 {
+		return "", "", false
+	}
+	return key[:idx], key[idx+1:], true
+}
+
+func parseYarnLock(path string) ([]dep, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+
+	var deps []dep
+	var selectors []string
+	seen := map[string]struct{}{}
+	for _, raw := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if !strings.HasPrefix(raw, " ") && strings.HasSuffix(line, ":") {
+			selectors = parseYarnSelectors(strings.TrimSuffix(line, ":"))
+			continue
+		}
+		if strings.HasPrefix(line, "version ") && len(selectors) > 0 {
+			version := strings.Trim(strings.TrimPrefix(line, "version "), `"`)
+			for _, selector := range selectors {
+				name, ok := packageNameFromYarnSelector(selector)
+				if !ok {
+					continue
+				}
+				id := name + "@" + version
+				if _, dup := seen[id]; dup {
+					continue
+				}
+				seen[id] = struct{}{}
+				deps = append(deps, dep{name: name, version: version})
+			}
+			selectors = nil
+		}
+	}
+	return deps, nil
+}
+
+func parseYarnSelectors(value string) []string {
+	parts := strings.Split(value, ",")
+	selectors := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.Trim(strings.TrimSpace(part), `"`)
+		if part != "" {
+			selectors = append(selectors, part)
+		}
+	}
+	return selectors
+}
+
+func packageNameFromYarnSelector(selector string) (string, bool) {
+	idx := strings.LastIndex(selector, "@")
+	if idx <= 0 {
+		return "", false
+	}
+	return selector[:idx], true
 }
 
 func fetchAll(deps []dep, opts Options) ([]Result, error) {

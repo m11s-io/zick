@@ -8,7 +8,7 @@ branding:
 
 inputs:
   commands:
-    description: "Comma-separated list of commands to run (fresh, secrets, scan)"
+    description: "Comma-separated list of commands to run (fresh, secrets, scan, sbom, audit)"
     default: "fresh,secrets"
     required: false
   age_gate_days:
@@ -34,6 +34,18 @@ inputs:
   scan_tools:
     description: "Comma-separated scanners to run (osv-scanner, trivy)"
     default: "osv-scanner,trivy"
+    required: false
+  sarif_output:
+    description: "Write scan output as SARIF to this path"
+    default: ""
+    required: false
+  sbom_format:
+    description: "SBOM format (cyclonedx-json, spdx-json, syft-json)"
+    default: "cyclonedx-json"
+    required: false
+  sbom_output:
+    description: "Write SBOM to this file"
+    default: ""
     required: false
   path:
     description: "Path to scan"
@@ -98,4 +110,31 @@ runs:
       if: contains(inputs.commands, 'scan')
       shell: bash
       run: |
-        zick scan --tools "${{ inputs.scan_tools }}" "${{ inputs.path }}"
+        SARIF_FLAG=""
+        [ -n "${{ inputs.sarif_output }}" ] && SARIF_FLAG="--sarif-output ${{ inputs.sarif_output }}"
+        zick scan --tools "${{ inputs.scan_tools }}" $SARIF_FLAG "${{ inputs.path }}"
+
+    - name: Run zick sbom
+      if: contains(inputs.commands, 'sbom')
+      shell: bash
+      run: |
+        OUTPUT_FLAG=""
+        [ -n "${{ inputs.sbom_output }}" ] && OUTPUT_FLAG="--output ${{ inputs.sbom_output }}"
+        zick sbom --format "${{ inputs.sbom_format }}" $OUTPUT_FLAG "${{ inputs.path }}"
+
+    - name: Run zick audit
+      if: contains(inputs.commands, 'audit')
+      shell: bash
+      run: |
+        SARIF_FLAG=""
+        [ -n "${{ inputs.sarif_output }}" ] && SARIF_FLAG="--sarif-output ${{ inputs.sarif_output }}"
+        DEV_FLAG=""
+        [ "${{ inputs.include_dev }}" = "true" ] && DEV_FLAG="--include-dev"
+        zick audit \
+          --age-gate "${{ inputs.age_gate_days }}" \
+          --fail-on "${{ inputs.fail_on }}" \
+          --secrets-tool "${{ inputs.secrets_tool }}" \
+          --scan-tools "${{ inputs.scan_tools }}" \
+          $SARIF_FLAG \
+          $DEV_FLAG \
+          "${{ inputs.path }}"

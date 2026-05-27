@@ -12,6 +12,7 @@ type Config struct {
 	Fresh   FreshConfig   `yaml:"fresh"`
 	Secrets SecretsConfig `yaml:"secrets"`
 	Scan    ScanConfig    `yaml:"scan"`
+	SBOM    SBOMConfig    `yaml:"sbom"`
 }
 
 type FreshConfig struct {
@@ -26,7 +27,13 @@ type SecretsConfig struct {
 }
 
 type ScanConfig struct {
-	Tools []string `yaml:"tools"`
+	Tools       []string `yaml:"tools"`
+	SARIFOutput string   `yaml:"sarif_output"`
+}
+
+type SBOMConfig struct {
+	Format string `yaml:"format"`
+	Output string `yaml:"output"`
 }
 
 func Load(path string) (Config, error) {
@@ -35,15 +42,37 @@ func Load(path string) (Config, error) {
 		dir = filepath.Dir(path)
 	}
 
-	configPath := filepath.Join(dir, ".zick.yaml")
-	if _, err := os.Stat(configPath); err != nil {
-		if os.IsNotExist(err) {
-			return Config{}, nil
-		}
-		return Config{}, fmt.Errorf("stat %s: %w", configPath, err)
+	configPath, err := findConfig(dir)
+	if err != nil {
+		return Config{}, err
+	}
+	if configPath == "" {
+		return Config{}, nil
 	}
 
 	return parse(configPath)
+}
+
+func findConfig(dir string) (string, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", fmt.Errorf("resolve config search path %s: %w", dir, err)
+	}
+
+	for {
+		configPath := filepath.Join(abs, ".zick.yaml")
+		if _, err := os.Stat(configPath); err == nil {
+			return configPath, nil
+		} else if !os.IsNotExist(err) {
+			return "", fmt.Errorf("stat %s: %w", configPath, err)
+		}
+
+		parent := filepath.Dir(abs)
+		if parent == abs {
+			return "", nil
+		}
+		abs = parent
+	}
 }
 
 func parse(path string) (Config, error) {

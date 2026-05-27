@@ -33,8 +33,10 @@ func newRootCmd() *cobra.Command {
 	)
 
 	root.AddCommand(
+		newAuditCmd(),
 		newFreshCmd(),
 		newScanCmd(),
+		newSBOMCmd(),
 		newSecretsCmd(),
 	)
 

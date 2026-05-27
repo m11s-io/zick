@@ -41,7 +41,7 @@ func TestRunScanRunsToolsInOrder(t *testing.T) {
 
 	var out, errOut bytes.Buffer
 	executor := NewExecutor(&out, &errOut)
-	if err := executor.RunScan("/repo", []string{"osv-scanner", "trivy"}); err != nil {
+	if err := executor.RunScan("/repo", []string{"osv-scanner", "trivy"}, ScanOptions{}); err != nil {
 		t.Fatalf("RunScan: %v", err)
 	}
 
@@ -51,6 +51,47 @@ func TestRunScanRunsToolsInOrder(t *testing.T) {
 	}
 	if !strings.Contains(got, "Running trivy") || !strings.Contains(got, "trivy fs /repo") {
 		t.Fatalf("stdout = %q, want trivy execution", got)
+	}
+}
+
+func TestRunScanPassesSARIFOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper shell script is POSIX-only")
+	}
+
+	dir := t.TempDir()
+	writeExecutable(t, filepath.Join(dir, "trivy"), "#!/bin/sh\necho trivy \"$@\"\n")
+	t.Setenv("PATH", dir)
+
+	var out, errOut bytes.Buffer
+	executor := NewExecutor(&out, &errOut)
+	if err := executor.RunScan("/repo", []string{"trivy"}, ScanOptions{SARIFOutput: "scan.sarif"}); err != nil {
+		t.Fatalf("RunScan: %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "trivy fs /repo --format sarif --output scan.sarif") {
+		t.Fatalf("stdout = %q, want SARIF args", got)
+	}
+}
+
+func TestRunSBOMUsesSyftArgs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper shell script is POSIX-only")
+	}
+
+	dir := t.TempDir()
+	writeExecutable(t, filepath.Join(dir, "syft"), "#!/bin/sh\necho syft \"$@\"\n")
+	t.Setenv("PATH", dir)
+
+	var out, errOut bytes.Buffer
+	executor := NewExecutor(&out, &errOut)
+	if err := executor.RunSBOM("/repo", SBOMOptions{Format: "spdx-json", Output: "sbom.json"}); err != nil {
+		t.Fatalf("RunSBOM: %v", err)
+	}
+
+	if !strings.Contains(out.String(), "syft /repo -o spdx-json=sbom.json") {
+		t.Fatalf("stdout = %q, want syft args", out.String())
 	}
 }
 

@@ -15,6 +15,15 @@ type Tool interface {
 	Args(path string) []string
 }
 
+type ScanOptions struct {
+	SARIFOutput string
+}
+
+type SBOMOptions struct {
+	Format string
+	Output string
+}
+
 // Executor resolves tool execution: local binary first, Docker fallback.
 // out and errOut mirror cobra's cmd.OutOrStdout() / cmd.ErrOrStderr() so
 // output can be redirected in tests.
@@ -42,14 +51,14 @@ func (e *Executor) RunSecrets(path, toolName string) error {
 	return e.run(t, path)
 }
 
-func (e *Executor) RunScan(path string, toolNames []string) error {
+func (e *Executor) RunScan(path string, toolNames []string, opts ScanOptions) error {
 	for _, toolName := range toolNames {
 		var t Tool
 		switch toolName {
 		case "osv-scanner":
-			t = &OSVScanner{}
+			t = &OSVScanner{SARIFOutput: opts.SARIFOutput}
 		case "trivy":
-			t = &Trivy{}
+			t = &Trivy{SARIFOutput: opts.SARIFOutput}
 		default:
 			return fmt.Errorf("unsupported scanner %q", toolName)
 		}
@@ -60,6 +69,10 @@ func (e *Executor) RunScan(path string, toolNames []string) error {
 		}
 	}
 	return nil
+}
+
+func (e *Executor) RunSBOM(path string, opts SBOMOptions) error {
+	return e.run(&Syft{Format: opts.Format, Output: opts.Output}, path)
 }
 
 func (e *Executor) run(t Tool, path string) error {

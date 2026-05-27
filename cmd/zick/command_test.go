@@ -83,6 +83,20 @@ func TestScanRejectsInvalidTool(t *testing.T) {
 	}
 }
 
+func TestSBOMRejectsInvalidFormat(t *testing.T) {
+	_, _, err := executeForTest(t, "sbom", "--format", "xml")
+	if err == nil || !strings.Contains(err.Error(), "--format must be one of") {
+		t.Fatalf("error = %v, want invalid format error", err)
+	}
+}
+
+func TestAuditRejectsInvalidScanTool(t *testing.T) {
+	_, _, err := executeForTest(t, "audit", "--scan-tools", "bad")
+	if err == nil || !strings.Contains(err.Error(), "unsupported scanner") {
+		t.Fatalf("error = %v, want unsupported scanner error", err)
+	}
+}
+
 func TestSplitTools(t *testing.T) {
 	got := splitTools("osv-scanner, trivy,,")
 	if len(got) != 2 || got[0] != "osv-scanner" || got[1] != "trivy" {

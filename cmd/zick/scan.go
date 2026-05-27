@@ -11,6 +11,7 @@ import (
 
 func newScanCmd() *cobra.Command {
 	var toolList string
+	var sarifOutput string
 
 	cmd := &cobra.Command{
 		Use:     "scan [path]",
@@ -36,16 +37,20 @@ Supported tools: osv-scanner, trivy`,
 			if !flagChanged(cmd, "tools") && len(cfg.Scan.Tools) > 0 {
 				scanTools = cfg.Scan.Tools
 			}
+			if !flagChanged(cmd, "sarif-output") && cfg.Scan.SARIFOutput != "" {
+				sarifOutput = cfg.Scan.SARIFOutput
+			}
 			if err := validateScanTools(scanTools); err != nil {
 				return err
 			}
 
 			executor := tools.NewExecutor(cmd.OutOrStdout(), cmd.ErrOrStderr())
-			return executor.RunScan(path, scanTools)
+			return executor.RunScan(path, scanTools, tools.ScanOptions{SARIFOutput: sarifOutput})
 		},
 	}
 
 	cmd.Flags().StringVar(&toolList, "tools", "osv-scanner,trivy", "Comma-separated scanners to run (osv-scanner, trivy)")
+	cmd.Flags().StringVar(&sarifOutput, "sarif-output", "", "Write scanner output as SARIF to this path")
 
 	return cmd
 }

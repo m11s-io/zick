@@ -12,6 +12,11 @@ secrets:
 
 scan:
   tools: [osv-scanner, trivy]
+  sarif_output: ""          # optional path, e.g. zick.sarif
+
+sbom:
+  format: cyclonedx-json    # cyclonedx-json | spdx-json | syft-json
+  output: ""                # optional path, e.g. sbom.json
 #
 # sbom:
 #   format: cyclonedx-json   # cyclonedx-json | spdx-json | syft-json

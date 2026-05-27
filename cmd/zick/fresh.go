@@ -27,7 +27,7 @@ func newFreshCmd() *cobra.Command {
 published within the configured age gate. Helps catch supply chain attacks
 before packages are installed.
 
-Reads bun.lock, package-lock.json (exact versions), or package.json (latest from registry).`,
+Reads bun.lock, pnpm-lock.yaml, yarn.lock, package-lock.json, or package.json.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "."
@@ -65,7 +65,7 @@ Reads bun.lock, package-lock.json (exact versions), or package.json (latest from
 			}
 
 			if len(results) == 0 {
-				cmd.Println("No supported manifest found (bun.lock, package-lock.json, package.json).")
+				cmd.Println("No supported manifest found (bun.lock, pnpm-lock.yaml, yarn.lock, package-lock.json, package.json).")
 				return nil
 			}
 

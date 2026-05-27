@@ -74,3 +74,22 @@ func TestLoadFromFilePath(t *testing.T) {
 		t.Fatalf("secrets.tool = %q, want betterleaks", cfg.Secrets.Tool)
 	}
 }
+
+func TestLoadWalksUpFromNestedPath(t *testing.T) {
+	dir := t.TempDir()
+	nested := filepath.Join(dir, "packages", "app")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".zick.yaml"), []byte("sbom:\n  format: spdx-json\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(nested)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.SBOM.Format != "spdx-json" {
+		t.Fatalf("sbom.format = %q, want spdx-json", cfg.SBOM.Format)
+	}
+}
