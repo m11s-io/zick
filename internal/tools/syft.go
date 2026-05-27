@@ -7,7 +7,7 @@ type Syft struct {
 
 func (s *Syft) Name() string        { return "syft" }
 func (s *Syft) BinaryName() string  { return "syft" }
-func (s *Syft) DockerImage() string { return "anchore/syft:latest" }
+func (s *Syft) DockerImage() string { return "ghcr.io/anchore/syft:latest" }
 func (s *Syft) Args(path string) []string {
 	format := s.Format
 	if format == "" {

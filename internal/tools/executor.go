@@ -91,7 +91,9 @@ func (e *Executor) run(t Tool, path string) error {
 	}
 
 	if _, err := exec.LookPath("docker"); err == nil {
+		absPath, _ := filepath.Abs(path)
 		fmt.Fprintf(e.errOut, "%s not found in PATH — falling back to Docker (%s)\n", t.BinaryName(), t.DockerImage())
+		fmt.Fprintf(e.errOut, "mounting %s → /src\n", absPath)
 		e.pullIfStale(t.DockerImage())
 		var cacheMount [2]string
 		if dc, ok := t.(dockerCacher); ok {
