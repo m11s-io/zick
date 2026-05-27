@@ -72,7 +72,6 @@ func printFreshTable(cmd *cobra.Command, results []fresh.Result) {
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
 	table.SetColumnSeparator("  ")
 	table.SetHeaderLine(false)
-	table.SetNoWhiteSpace(true)
 
 	for _, r := range results {
 		table.Append([]string{

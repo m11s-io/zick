@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,12 @@ const (
 	requestTimeout = 10 * time.Second
 	maxConcurrent  = 10
 )
+
+// trailingCommaRe strips trailing commas before ] or } so bun.lock (JSONC) can
+// be parsed by the standard library. This is safe for bun.lock because the
+// string values it contains (URLs, integrity hashes) never themselves contain ,}
+// or ,] sequences.
+var trailingCommaRe = regexp.MustCompile(`,(\s*[}\]])`)
 
 type packageJSON struct {
 	Dependencies    map[string]string `json:"dependencies"`
@@ -29,6 +36,16 @@ type packageLockV2 struct {
 		Version string `json:"version"`
 		Dev     bool   `json:"dev"`
 	} `json:"packages"`
+}
+
+type bunLock struct {
+	// Packages maps keys to [name@version, url, {deps}, integrity] arrays.
+	// The key may be the package name, "name@version", or a resolution path
+	// like "parent-pkg/dep-pkg". The first array element is always the
+	// canonical "name@version" string and is the only reliable source.
+	// Dev/prod distinction is not available at this level — --include-dev is
+	// a no-op when bun.lock is the source.
+	Packages map[string][]json.RawMessage `json:"packages"`
 }
 
 // npmMeta is the subset of registry metadata we need.
@@ -56,6 +73,10 @@ type dep struct {
 }
 
 func resolveDeps(path string, includeDev bool) ([]dep, error) {
+	// bun.lock covers the entire workspace with exact versions — prefer it.
+	if _, err := os.Stat(filepath.Join(path, "bun.lock")); err == nil {
+		return parseBunLock(filepath.Join(path, "bun.lock"))
+	}
 	if _, err := os.Stat(filepath.Join(path, "package-lock.json")); err == nil {
 		return parseLock(filepath.Join(path, "package-lock.json"), includeDev)
 	}
@@ -63,6 +84,63 @@ func resolveDeps(path string, includeDev bool) ([]dep, error) {
 		return parsePkg(filepath.Join(path, "package.json"), includeDev)
 	}
 	return nil, nil
+}
+
+// parseBunLock extracts exact package versions from a bun.lock file.
+// bun.lock is JSONC (trailing commas allowed) and the packages section key
+// format is "name@version" — one entry per resolved package across all
+// workspaces. --include-dev has no effect here since bun.lock does not
+// distinguish dev from prod at the packages level.
+func parseBunLock(path string) ([]dep, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+
+	cleaned := trailingCommaRe.ReplaceAll(data, []byte("$1"))
+
+	var lock bunLock
+	if err := json.Unmarshal(cleaned, &lock); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+
+	seen := make(map[string]struct{}, len(lock.Packages))
+	var deps []dep
+	for _, arr := range lock.Packages {
+		if len(arr) == 0 {
+			continue
+		}
+		// First element is always the canonical "name@version" string.
+		var nameAtVersion string
+		if err := json.Unmarshal(arr[0], &nameAtVersion); err != nil {
+			continue
+		}
+		name, version, ok := splitBunPkgKey(nameAtVersion)
+		if !ok {
+			continue
+		}
+		// Deduplicate: the same resolved package may appear under multiple
+		// keys (direct dep + path-based resolution for the same version).
+		if _, dup := seen[nameAtVersion]; dup {
+			continue
+		}
+		seen[nameAtVersion] = struct{}{}
+		deps = append(deps, dep{name: name, version: version})
+	}
+	return deps, nil
+}
+
+// splitBunPkgKey splits a bun.lock package key like "lodash@4.17.21" or
+// "@types/react@19.2.14" into (name, version). Returns ok=false if the key
+// has no version component.
+func splitBunPkgKey(key string) (name, version string, ok bool) {
+	// Find the last "@" — for scoped packages like "@types/react@1.0.0" the
+	// first "@" is the scope prefix, so we must use the last one.
+	idx := strings.LastIndex(key, "@")
+	if idx <= 0 {
+		return "", "", false
+	}
+	return key[:idx], key[idx+1:], true
 }
 
 func parseLock(path string, includeDev bool) ([]dep, error) {
@@ -157,12 +235,13 @@ func fetchOne(d dep, opts Options) (Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 	defer cancel()
 
-	url := opts.baseURL() + "/" + d.name
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	// Fetch the full packument — the abbreviated vnd.npm.install-v1+json format
+	// intentionally omits the "time" field, which is the only data we need.
+	// One full request is faster than abbreviated + fallback.
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opts.baseURL()+"/"+d.name, nil)
 	if err != nil {
 		return Result{}, err
 	}
-	req.Header.Set("Accept", "application/vnd.npm.install-v1+json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -189,44 +268,10 @@ func fetchOne(d dep, opts Options) (Result, error) {
 
 	rawTime, ok := meta.Time[version]
 	if !ok {
-		// Abbreviated metadata omits time; retry with full document.
-		return fetchOneFull(d.name, version, opts)
-	}
-
-	return buildResult(d.name, version, rawTime, opts.AgeDays)
-}
-
-// fetchOneFull fetches the full registry document to get the time field.
-func fetchOneFull(name, version string, opts Options) (Result, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opts.baseURL()+"/"+name, nil)
-	if err != nil {
-		return Result{}, err
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return Result{}, fmt.Errorf("registry request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return Result{}, fmt.Errorf("registry returned %d", resp.StatusCode)
-	}
-
-	var meta npmMeta
-	if err := json.NewDecoder(resp.Body).Decode(&meta); err != nil {
-		return Result{}, fmt.Errorf("decode registry response: %w", err)
-	}
-
-	rawTime, ok := meta.Time[version]
-	if !ok {
 		return Result{}, fmt.Errorf("version %s not found in registry time map", version)
 	}
 
-	return buildResult(name, version, rawTime, opts.AgeDays)
+	return buildResult(d.name, version, rawTime, opts.AgeDays)
 }
 
 func buildResult(name, version, rawTime string, ageDays int) (Result, error) {

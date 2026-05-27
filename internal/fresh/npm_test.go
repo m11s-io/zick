@@ -276,6 +276,86 @@ func TestCheck_WithPackageJSON(t *testing.T) {
 	}
 }
 
+// TestParseBunLock covers bun.lock JSONC parsing and name@version splitting.
+func TestParseBunLock(t *testing.T) {
+	// Realistic bun.lock snippet: keys are package names (no version), first
+	// array element is canonical "name@version". Path-based keys are also
+	// present for conflict resolution — same package, should be deduplicated.
+	lock := `{
+		"lockfileVersion": 1,
+		"workspaces": {
+			"": {
+				"name": "my-app",
+				"dependencies": { "lodash": "4.17.21", },
+				"devDependencies": { "typescript": "5.4.0", },
+			},
+		},
+		"packages": {
+			"lodash": ["lodash@4.17.21", "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz", {}, "sha512-abc"],
+			"@types/react": ["@types/react@19.2.14", "https://registry.npmjs.org/@types/react/-/react-19.2.14.tgz", {}, "sha512-xyz"],
+			"typescript": ["typescript@5.4.0", "https://registry.npmjs.org/typescript/-/typescript-5.4.0.tgz", {}, "sha512-def"],
+			"some-parent/@types/react": ["@types/react@19.2.14", "https://registry.npmjs.org/@types/react/-/react-19.2.14.tgz", {}, "sha512-xyz"],
+		},
+	}`
+
+	path := filepath.Join(t.TempDir(), "bun.lock")
+	if err := os.WriteFile(path, []byte(lock), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	deps, err := parseBunLock(path)
+	if err != nil {
+		t.Fatalf("parseBunLock: %v", err)
+	}
+
+	// 4 entries in packages section but @types/react appears twice (deduped to 3).
+	if len(deps) != 3 {
+		t.Fatalf("expected 3 deps (deduped), got %d: %+v", len(deps), deps)
+	}
+
+	byName := make(map[string]string, len(deps))
+	for _, d := range deps {
+		byName[d.name] = d.version
+	}
+
+	if byName["lodash"] != "4.17.21" {
+		t.Errorf("lodash version = %q, want 4.17.21", byName["lodash"])
+	}
+	if byName["@types/react"] != "19.2.14" {
+		t.Errorf("@types/react version = %q, want 19.2.14", byName["@types/react"])
+	}
+	if byName["typescript"] != "5.4.0" {
+		t.Errorf("typescript version = %q, want 5.4.0", byName["typescript"])
+	}
+}
+
+func TestSplitBunPkgKey(t *testing.T) {
+	tests := []struct {
+		key         string
+		wantName    string
+		wantVersion string
+		wantOK      bool
+	}{
+		{"lodash@4.17.21", "lodash", "4.17.21", true},
+		{"@types/react@19.2.14", "@types/react", "19.2.14", true},
+		{"@scope/pkg@1.0.0-beta.1", "@scope/pkg", "1.0.0-beta.1", true},
+		{"noscope", "", "", false},
+		{"@scope/only", "", "", false}, // no version component
+	}
+
+	for _, tc := range tests {
+		name, version, ok := splitBunPkgKey(tc.key)
+		if ok != tc.wantOK {
+			t.Errorf("splitBunPkgKey(%q) ok=%v, want %v", tc.key, ok, tc.wantOK)
+			continue
+		}
+		if ok && (name != tc.wantName || version != tc.wantVersion) {
+			t.Errorf("splitBunPkgKey(%q) = (%q, %q), want (%q, %q)",
+				tc.key, name, version, tc.wantName, tc.wantVersion)
+		}
+	}
+}
+
 // TestCheck_NoManifest confirms that a directory with no manifest returns nil.
 func TestCheck_NoManifest(t *testing.T) {
 	results, err := Check(t.TempDir(), Options{AgeDays: 7})
