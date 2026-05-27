@@ -42,11 +42,11 @@ func NewExecutor(out, errOut io.Writer) *Executor {
 func (e *Executor) RunSecrets(path, toolName string) error {
 	switch toolName {
 	case "betterleaks":
-		return e.run(&Betterleaks{}, path)
+		return e.run(NewBetterleaks(path), path)
 	case "gitleaks":
 		return e.run(&Gitleaks{}, path)
 	default: // "auto"
-		return e.run(&Betterleaks{}, path)
+		return e.run(NewBetterleaks(path), path)
 	}
 }
 

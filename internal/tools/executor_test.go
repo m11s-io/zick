@@ -138,9 +138,14 @@ func TestRunSecretsAutoFallsBackToBetterleaksDocker(t *testing.T) {
 	writeExecutable(t, docker, "#!/bin/sh\necho docker \"$@\"\n")
 	t.Setenv("PATH", dir)
 
+	repo := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
 	var out, errOut bytes.Buffer
 	executor := NewExecutor(&out, &errOut)
-	if err := executor.RunSecrets("/repo", "auto"); err != nil {
+	if err := executor.RunSecrets(repo, "auto"); err != nil {
 		t.Fatalf("RunSecrets: %v", err)
 	}
 
@@ -153,6 +158,31 @@ func TestRunSecretsAutoFallsBackToBetterleaksDocker(t *testing.T) {
 	}
 	if !strings.Contains(got, "git /src") {
 		t.Fatalf("stdout = %q, want betterleaks git subcommand with container path", got)
+	}
+}
+
+func TestRunSecretsBetterleaksUsesDirForNonGitTarget(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper shell script is POSIX-only")
+	}
+
+	dir := t.TempDir()
+	writeExecutable(t, filepath.Join(dir, "betterleaks"), "#!/bin/sh\necho betterleaks \"$@\"\n")
+	t.Setenv("PATH", dir)
+
+	target := filepath.Join(t.TempDir(), "plain")
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	executor := NewExecutor(&out, &errOut)
+	if err := executor.RunSecrets(target, "betterleaks"); err != nil {
+		t.Fatalf("RunSecrets: %v", err)
+	}
+
+	if !strings.Contains(out.String(), "dir "+target) {
+		t.Fatalf("stdout = %q, want betterleaks dir subcommand", out.String())
 	}
 }
 
