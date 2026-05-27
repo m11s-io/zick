@@ -3,9 +3,10 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
+	"io"
 	"os"
 
+	"charm.land/fang/v2"
 	"github.com/m11s-io/zick/internal/app"
 	"github.com/m11s-io/zick/internal/cli"
 )
@@ -18,14 +19,22 @@ var (
 )
 
 func main() {
-	ver := fmt.Sprintf("%s (commit %s, built %s)", version, commit, date)
-	root := app.NewRootCmd(ver)
-	if err := root.ExecuteContext(context.Background()); err != nil {
+	root := app.NewRootCmd("")
+	err := fang.Execute(context.Background(), root,
+		fang.WithVersion(version+" (built "+date+")"),
+		fang.WithCommit(commit),
+		fang.WithErrorHandler(func(w io.Writer, styles fang.Styles, err error) {
+			var se *cli.SilentError
+			if !errors.As(err, &se) {
+				fang.DefaultErrorHandler(w, styles, err)
+			}
+		}),
+	)
+	if err != nil {
 		var se *cli.SilentError
 		if errors.As(err, &se) {
 			os.Exit(se.Code)
 		}
-		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
