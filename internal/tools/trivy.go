@@ -23,9 +23,9 @@ func (t *Trivy) Args(path string) []string {
 // CacheMount persists the trivy vulnerability DB across Docker runs so it is
 // not re-downloaded on every invocation.
 func (t *Trivy) CacheMount() (string, string) {
-	home, err := os.UserHomeDir()
+	cacheDir, err := os.UserCacheDir()
 	if err != nil {
 		return "", ""
 	}
-	return filepath.Join(home, ".cache", "trivy"), "/root/.cache/trivy"
+	return filepath.Join(cacheDir, "trivy"), "/root/.cache/trivy"
 }

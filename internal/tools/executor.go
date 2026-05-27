@@ -107,7 +107,11 @@ func (e *Executor) run(t Tool, path string) error {
 // days. The timestamp is tracked in ~/.cache/zick/. A failed pull is silently
 // ignored so offline use continues to work with the cached image.
 func (e *Executor) pullIfStale(image string) {
-	tsFile := imagePullTimestampPath(image)
+	tsFile, err := imagePullTimestampPath(image)
+	if err != nil {
+		return // can't determine cache dir; skip pull silently
+	}
+
 	if info, err := os.Stat(tsFile); err == nil && time.Since(info.ModTime()) < imagePullInterval {
 		return
 	}
@@ -125,10 +129,13 @@ func (e *Executor) pullIfStale(image string) {
 	_ = os.WriteFile(tsFile, []byte{}, 0o644)
 }
 
-func imagePullTimestampPath(image string) string {
-	home, _ := os.UserHomeDir()
+func imagePullTimestampPath(image string) (string, error) {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
 	safe := strings.NewReplacer("/", "_", ":", "_").Replace(image)
-	return filepath.Join(home, ".cache", "zick", safe+"-last-pull")
+	return filepath.Join(cacheDir, "zick", safe+"-last-pull"), nil
 }
 
 func (e *Executor) runLocal(binary string, args []string) error {
