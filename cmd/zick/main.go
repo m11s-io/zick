@@ -19,10 +19,10 @@ var (
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:          "zick",
-		Short:        "Developer-first security scanning CLI",
-		Long:         "zick orchestrates best-in-class open-source security tools into a single binary.\nRun it locally, in Docker, or point it at a deployed cluster service.",
-		Version:      fmt.Sprintf("%s (commit %s, built %s)", version, commit, date),
+		Use:           "zick",
+		Short:         "Developer-first supply-chain and secret scanning CLI",
+		Long:          "zick checks dependency freshness, scans for secrets, and runs vulnerability scanners locally or through Docker fallback.",
+		Version:       fmt.Sprintf("%s (commit %s, built %s)", version, commit, date),
 		SilenceErrors: true,
 		SilenceUsage:  true,
 	}
@@ -34,6 +34,7 @@ func newRootCmd() *cobra.Command {
 
 	root.AddCommand(
 		newFreshCmd(),
+		newScanCmd(),
 		newSecretsCmd(),
 	)
 

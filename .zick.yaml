@@ -5,14 +5,13 @@ fresh:
   age_gate_days: 7           # flag packages published within this many days
   include_dev: false         # include devDependencies
   fail_on: high              # exit 1 on: high | warn
+  format: table              # table | json
 
 secrets:
   tool: auto                 # betterleaks | gitleaks | auto
 
-# Stage 2+
-# scan:
-#   tools: [trivy, osv-scanner]
-#   severity: MEDIUM
+scan:
+  tools: [osv-scanner, trivy]
 #
 # sbom:
 #   format: cyclonedx-json   # cyclonedx-json | spdx-json | syft-json

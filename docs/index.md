@@ -1,109 +1,86 @@
 # zick
 
-Developer-first security scanning CLI — one command, the whole picture.
+Developer-first supply-chain and secret scanning CLI.
 
-zick orchestrates best-in-class open-source security tools into a single binary. Run it locally, in Docker, or point it at a deployed cluster service. No vendor lock-in, no agents, no accounts required.
+zick currently provides dependency publish-age checks for npm-compatible
+projects, secret scanning through betterleaks or gitleaks, and vulnerability
+scanning through osv-scanner or trivy.
 
----
-
-## Why zick
-
-Modern supply chain attacks exploit a simple window: the gap between when a package is published and when the community notices something is wrong. Existing tools catch known CVEs. zick catches the unknown — packages too new to have been vetted, secrets committed before the push, SBOMs never generated.
-
-It also solves fragmentation: trivy, osv-scanner, betterleaks, syft — all excellent individually, all requiring separate invocations, configs, and output formats. zick wraps them into a coherent developer workflow.
-
----
-
-## Quick start
+## Quick Start
 
 ```bash
-# Install (Linux / macOS)
-curl -sSL https://raw.githubusercontent.com/m11s-io/zick/main/install.sh | sh
-
-# Or via Go
-go install github.com/m11s-io/zick/cmd/zick@latest
-
-# Check your npm dependencies aren't suspiciously fresh
 zick fresh .
-
-# Scan for committed secrets
 zick secrets .
+zick secrets --tool gitleaks .
+zick scan --tools osv-scanner .
 ```
-
----
 
 ## Commands
 
 | Command | What it does | Stage |
 |---------|-------------|-------|
-| `zick fresh [path]` | Freshness age gate — flags packages published within N days | 1 ✅ |
-| `zick secrets [path]` | Secret scan via betterleaks / gitleaks | 1 ✅ |
-| `zick scan [path]` | Vulnerability scan via trivy + osv-scanner | 2 |
-| `zick sbom [path]` | SBOM generation via syft | 3 |
-| `zick audit [path]` | Full audit: fresh + scan + secrets | 3 |
-| `zick hook install` | Install pre-commit hooks | 3 |
-| `zick serve` | Run as a REST API service | 4 |
+| `zick fresh [path]` | Freshness age gate for npm-compatible dependencies | 1 |
+| `zick secrets [path]` | Secret scan via betterleaks or gitleaks | 1 |
+| `zick scan [path]` | Vulnerability scan via osv-scanner and trivy | 1 |
+| `zick sbom [path]` | SBOM generation via syft | planned |
+| `zick audit [path]` | Full audit: fresh + scan + secrets | planned |
+| `zick hook install` | Install pre-commit hooks | planned |
+| `zick serve` | Run as a REST API service | planned |
 
----
+## Supply Chain Freshness
 
-## Supply chain freshness
+`zick fresh` queries npm registry metadata for publish timestamps and flags
+dependencies published within a configurable age window. The default age gate is
+7 days.
 
-The flagship feature. `zick fresh` queries package registries for publish timestamps and flags dependencies published within a configurable age window (default: 7 days).
+Manifest resolution order:
 
-```
-$ zick fresh .
+1. `bun.lock` - exact resolved versions
+2. `package-lock.json` - exact installed versions
+3. `package.json` - current `latest` version from registry
 
-  RISK   PACKAGE              VERSION   PUBLISHED     AGE
-  HIGH   some-util            2.1.0     2026-05-25    2 days ago
-  WARN   another-pkg          1.0.0     2026-05-21    6 days ago
-  OK     lodash               4.17.21   2021-02-20    5 years ago
+Flags:
 
-  2 package(s) below the 7-day age gate.
-```
-
-Exit code 1 when violations are found — safe to use in CI.
-
-**Manifest resolution order:**
-
-1. `package-lock.json` → exact installed versions
-2. `package.json` → latest matching version from registry
-
-**Flags:**
-
-```
+```text
 --age-gate int     Flag packages published within this many days (default 7)
---fail-on string   Exit 1 when this risk level is found: high | warn (default "high")
---include-dev      Include devDependencies
+--fail-on string   Exit 1 when this risk level is found: high | warn
+--format string    Output format: table | json
+--include-dev      Include devDependencies for package.json/package-lock.json
 ```
 
-**Ecosystems:** npm (Stage 1) · PyPI · crates.io · RubyGems · Go modules (Stage 2)
+Ecosystems: npm-compatible registry metadata in Stage 1. PyPI, crates.io,
+RubyGems, and Go modules are planned.
 
----
+## Secret Scanning
 
-## Secret scanning
-
-`zick secrets` runs a secret scanner against the target path. Tool resolution order: local binary → Docker fallback.
+`zick secrets` runs a secret scanner against the target path. Tool resolution
+order is local binary first, then Docker fallback.
 
 ```bash
 zick secrets .
 zick secrets --tool gitleaks .
 ```
 
-**Supported tools:** betterleaks (default), gitleaks (Stage 2)
+Supported tools:
 
----
+- `betterleaks`
+- `gitleaks`
+- `auto` (currently resolves to betterleaks)
 
-## Execution modes
+## Vulnerability Scanning
 
-zick resolves where to run a tool — no config required for basic use:
+`zick scan` runs vulnerability scanners against the target path. Tool resolution
+order is local binary first, then Docker fallback.
 
-| Priority | Mode | Requirement |
-|----------|------|-------------|
-| 1 | Local | tool binary in `$PATH` |
-| 2 | Docker | `docker` in `$PATH` |
-| 3 | Remote | `ZICK_SERVER=https://...` env var (Stage 4) |
+```bash
+zick scan .
+zick scan --tools osv-scanner,trivy .
+```
 
----
+Supported scanners:
+
+- `osv-scanner`
+- `trivy`
 
 ## Configuration
 
@@ -111,68 +88,50 @@ Place `.zick.yaml` at your project root. All fields are optional.
 
 ```yaml
 fresh:
-  age_gate_days: 7      # default: 7
+  age_gate_days: 7
   include_dev: false
-  fail_on: high         # high | warn
+  fail_on: high
+  format: table
 
 secrets:
-  tool: auto            # betterleaks | gitleaks | auto
+  tool: auto
+
+scan:
+  tools: [osv-scanner, trivy]
 ```
 
----
-
-## GitHub Actions
-
-```yaml
-- uses: m11s-io/zick-action@v1
-  with:
-    commands: fresh,secrets
-    age_gate_days: 7
-    fail_on: high
-```
-
----
+Command-line flags override `.zick.yaml`.
 
 ## Architecture
 
-```
+```text
 cmd/zick/
-  main.go         newRootCmd() + ExecuteContext + SilentError handling
-  fresh.go        zick fresh — uses cmd.OutOrStdout() / cmd.ErrOrStderr()
-  secrets.go      zick secrets — passes cobra IO writers to executor
+  main.go         root command + ExecuteContext + SilentError handling
+  fresh.go        zick fresh command
+  scan.go         zick scan command
+  secrets.go      zick secrets command
 
 internal/
   cli/
-    error.go      SilentError — exit code without printing a message
+    error.go      SilentError for scan-result exits
+  config/
+    config.go     .zick.yaml loader
   fresh/
-    npm.go        npm registry client + package-lock.json / package.json parser
-    resolver.go   age gate classification (RiskOK / RiskWarn / RiskHigh)
+    npm.go        npm registry client + bun.lock / package-lock.json / package.json parser
+    resolver.go   age gate classification
   tools/
-    executor.go   Tool interface + local → Docker fallback resolver
+    executor.go   Tool interface + local -> Docker fallback resolver
     betterleaks.go  betterleaks Tool implementation
+    gitleaks.go     gitleaks Tool implementation
+    osvscanner.go   osv-scanner Tool implementation
+    trivy.go        trivy Tool implementation
 ```
 
-**Key design decisions:**
+## Roadmap
 
-- `newRootCmd()` returns a fresh command tree — enables testing without global state
-- All IO flows through `cmd.OutOrStdout()` / `cmd.ErrOrStderr()` — the executor receives `io.Writer` pairs, so tests can capture output
-- `SilentError` separates "scan found violations (exit 1, already printed summary)" from "tool failed (print error + exit 1)"
-- `ExecuteContext` threads a `context.Context` through cobra — subcommands can call `cmd.Context()` for timeouts and config values as the project grows
-- Command groups (`AddGroup`) are wired now; Stage 2 commands get `GroupID: "scan"` and slot into help output without a refactor
+Next useful work:
 
----
-
-## Contributing
-
-Each tool integration is a struct implementing the `Tool` interface in `internal/tools/`:
-
-```go
-type Tool interface {
-    Name() string
-    BinaryName() string
-    DockerImage() string
-    Args(path string) []string
-}
-```
-
-Add the struct, register it in `executor.go`'s `RunSecrets` (or a future `RunScan`), done.
+- SARIF output for GitHub Security tab
+- PyPI, crates.io, RubyGems, and Go module freshness checks
+- syft integration behind `zick sbom`
+- pre-commit hook installer

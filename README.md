@@ -1,133 +1,139 @@
 # zick
 
-> Developer-first security scanning CLI — one command, the whole picture.
+> Developer-first supply-chain and secret scanning CLI.
 
-zick orchestrates best-in-class open-source security tools into a single binary.
-Run it locally, in Docker, or point it at a deployed cluster service. No vendor
-lock-in, no agents, no accounts required.
+zick currently provides three local developer checks:
 
----
+- dependency publish-age checks for npm-compatible projects
+- secret scanning through betterleaks or gitleaks
+- vulnerability scanning through osv-scanner or trivy
 
 ## Why zick
 
-Modern supply chain attacks exploit a simple window: the gap between when a
-package is published and when the community notices something is wrong. Existing
-tools catch known CVEs. zick catches the unknown — packages too new to have been
-vetted, secrets committed before the push, SBOMs never generated.
+Modern supply chain attacks exploit the gap between when a package is published
+and when the community notices something is wrong. `zick fresh` helps make that
+gap visible by flagging packages that are newer than your configured age gate.
 
-It also solves the toolchain fragmentation problem: trivy, osv-scanner,
-betterleaks, syft, renovate — all excellent individually, all requiring separate
-invocations, configs, and output formats. zick wraps them into a coherent
-developer workflow.
-
----
+`zick secrets` gives the same project-level entry point for local secret
+scanners, using an installed tool when available and Docker as a fallback.
 
 ## Commands
 
-```
+```text
 zick fresh      Check dependencies for supply chain risk (freshness age gate)
-zick scan       Run vulnerability scan (trivy + osv-scanner)
 zick secrets    Scan for leaked secrets (betterleaks / gitleaks)
-zick sbom       Generate SBOM (syft → CycloneDX or SPDX)
-zick audit      Full audit: fresh + scan + secrets in one pass
-zick hook       Install / remove pre-commit hooks
-zick serve      Run as a local or cluster-deployed API service
+zick scan       Run vulnerability scan (osv-scanner / trivy)
 ```
 
----
+## Supply Chain Freshness
 
-## Supply chain freshness (`zick fresh`)
+`zick fresh` queries npm registry metadata for publish timestamps and flags
+dependencies published within a configurable age window. The default age gate is
+7 days.
 
-The flagship feature. Queries package registries for publish timestamps and flags
-dependencies published within a configurable age window (default: 7 days).
+Supported inputs:
 
-Supported ecosystems:
-- npm / jsr
-- PyPI
-- crates.io
-- RubyGems
-- Go modules (proxy.golang.org)
+- `bun.lock`
+- `package-lock.json`
+- `package.json`
 
-Example output:
+With a lockfile, zick checks exact resolved versions. With only `package.json`,
+zick checks the current registry `latest` version for each dependency.
 
-```
-$ zick fresh package.json
-
-  RISK   PACKAGE              VERSION   PUBLISHED     AGE
-  HIGH   some-util            2.1.0     2026-05-25    2 days ago   ← below 7d gate
-  WARN   another-pkg          1.0.0     2026-05-21    6 days ago   ← below 7d gate
-  OK     lodash               4.17.21   2021-02-20    5 years ago
-
-  2 packages below the 7-day age gate. Review before installing.
+```bash
+zick fresh .
+zick fresh --age-gate 14 --fail-on warn --include-dev .
+zick fresh --format json .
 ```
 
-Complements Renovate's `minimumReleaseAge` for CI — zick gives the same gate
-interactively to developers at install time.
+```text
+RISK   PACKAGE      VERSION   PUBLISHED    AGE
+HIGH   some-util    2.1.0     2026-05-25   2 days ago
+WARN   another-pkg  1.0.0     2026-05-21   6 days ago
+OK     lodash       4.17.21   2021-02-20   5 years ago
 
----
+2 package(s) below the 7-day age gate.
+```
 
-## Integrated tools
+Flags:
 
-| Tool | Purpose | zick command |
-|------|---------|--------------|
-| [osv-scanner](https://github.com/google/osv-scanner) | Known CVE matching via OSV database | `zick scan` |
-| [trivy](https://github.com/aquasecurity/trivy) | Container + filesystem vulnerability scan | `zick scan` |
-| [betterleaks](https://github.com/smartbugs/betterleaks) | Secret detection in code | `zick secrets` |
-| [syft](https://github.com/anchore/syft) | SBOM generation (CycloneDX / SPDX) | `zick sbom` |
-| [renovate](https://github.com/renovatebot/renovate) | Dependency update policy enforcement | `zick audit` |
-| [gitleaks](https://github.com/gitleaks/gitleaks) | Git history secret scan | `zick secrets` |
+```text
+--age-gate int     Flag packages published within this many days (default 7)
+--fail-on string   Exit 1 when this risk level is found: high | warn (default "high")
+--format string    Output format: table | json (default "table")
+--include-dev      Include devDependencies for package.json/package-lock.json
+```
 
----
+## Secret Scanning
 
-## Execution modes
+`zick secrets` runs a secret scanner against the target path.
 
-zick resolves tool execution in order — no config required for basic use:
+```bash
+zick secrets .
+zick secrets --tool gitleaks .
+```
 
-1. **Local** — uses the installed tool if found in `$PATH`
-2. **Docker** — falls back to `docker run ghcr.io/m11s-io/zick-tools:<tool>`
-3. **Remote** — forwards to a cluster-deployed `zick serve` instance (`ZICK_SERVER=https://...`)
+Supported tools:
 
----
+- `betterleaks`
+- `gitleaks`
+- `auto` (currently resolves to betterleaks)
+
+For external tools, zick resolves execution in order:
+
+1. Local binary in `$PATH`
+2. Docker fallback using the tool's container image
+
+## Vulnerability Scanning
+
+`zick scan` runs vulnerability scanners against the target path.
+
+```bash
+zick scan .
+zick scan --tools osv-scanner .
+zick scan --tools osv-scanner,trivy .
+```
+
+Supported scanners:
+
+- `osv-scanner`
+- `trivy`
+
+Like secret scanning, zick uses a local binary first and falls back to Docker.
 
 ## Configuration
 
-`.zick.yaml` at the project root:
+Place `.zick.yaml` at the project root. All fields are optional.
 
 ```yaml
 fresh:
-  age_gate_days: 7         # flag packages newer than this
-  ecosystems: [npm, pypi]  # limit scope
-  fail_on: high            # exit 1 on HIGH risk findings
-
-scan:
-  tools: [trivy, osv-scanner]
-  severity: MEDIUM
+  age_gate_days: 7
+  include_dev: false
+  fail_on: high
+  format: table
 
 secrets:
-  tools: [betterleaks, gitleaks]
+  tool: auto
 
-sbom:
-  format: cyclonedx-json
-  output: sbom.json
+scan:
+  tools: [osv-scanner, trivy]
 ```
 
----
+Command-line flags override `.zick.yaml`.
 
-## GitHub Actions integration
+## GitHub Actions
 
 ```yaml
 - uses: m11s-io/zick-action@v1
   with:
-    commands: fresh,secrets
+    commands: fresh,secrets,scan
     age_gate_days: 7
     fail_on: high
+    secrets_tool: auto
+    scan_tools: osv-scanner,trivy
 ```
 
----
-
 ## Installation
-
-### Local install
 
 ```bash
 # macOS / Linux (Homebrew)
@@ -140,80 +146,72 @@ curl -sSL https://raw.githubusercontent.com/m11s-io/zick/main/install.sh | sh
 go install github.com/m11s-io/zick/cmd/zick@latest
 ```
 
-### Docker
+Docker:
 
 ```bash
-docker run --rm -v $(pwd):/src ghcr.io/m11s-io/zick fresh /src
+docker run --rm -v "$(pwd):/src" ghcr.io/m11s-io/zick fresh /src
 ```
-
-### Kubernetes (cluster service)
-
-```bash
-helm repo add m11s-io https://charts.m11s-io.github.io
-helm install zick m11s-io/zick
-```
-
----
 
 ## Roadmap
 
-### Stage 1 — CLI foundation + freshness *(current)*
+Stage 1 - CLI foundation and freshness:
 
 - [x] Project scaffold (Go + Cobra)
-- [ ] `zick fresh` — npm freshness check against registry API
-- [ ] `zick secrets` — betterleaks integration (local + Docker fallback)
-- [ ] GitHub Actions workflow (`zick-action`)
-- [ ] Single binary releases via GoReleaser (linux/darwin, amd64/arm64)
-- [ ] Docker image published to `ghcr.io/m11s-io/zick`
+- [x] `zick fresh` npm registry freshness check
+- [x] `bun.lock`, `package-lock.json`, and `package.json` parsing
+- [x] `.zick.yaml` for `fresh` and `secrets`
+- [x] `zick secrets` with betterleaks and gitleaks
+- [x] `zick scan` with osv-scanner and trivy
+- [x] GitHub Actions workflow (`zick-action`)
+- [x] GitHub Action local smoke workflow
+- [x] Single binary release configuration via GoReleaser
+- [x] Docker image release configuration for `ghcr.io/m11s-io/zick`
 
-### Stage 2 — Vulnerability scanning
+Stage 2 - Vulnerability scanning:
 
-- [ ] trivy integration (local + Docker fallback)
-- [ ] osv-scanner integration
-- [ ] `zick scan` unified command
-- [ ] Multi-ecosystem freshness (PyPI, crates.io, RubyGems, Go)
+- [ ] Multi-ecosystem freshness: PyPI, crates.io, RubyGems, Go
 - [ ] SARIF output for GitHub Security tab
 
-### Stage 3 — SBOM + audit
+Stage 3 - SBOM and audit:
 
 - [ ] syft integration (`zick sbom`)
 - [ ] `zick audit` combining all checks
 - [ ] Pre-commit hook installer (`zick hook`)
 - [ ] Renovate config audit helper
-- [ ] bun.lock / yarn.lock / pnpm-lock.yaml lockfile parsing
+- [ ] yarn.lock / pnpm-lock.yaml parsing
 
-### Stage 4 — Platform
+Stage 4 - Platform:
 
 - [ ] `zick serve` REST API
 - [ ] Helm chart for Kubernetes deployment
-- [ ] Result persistence + history
+- [ ] Result persistence and history
 - [ ] Web dashboard
 - [ ] Slack / webhook notifications
 
----
-
 ## Contributing
 
-zick is built on Go + Cobra. Each tool integration lives in its own package
-under `internal/tools/`. Adding a new tool means implementing the `Tool`
-interface — see `docs/adding-a-tool.md`.
+zick is built on Go + Cobra.
 
-```
+```text
 cmd/
   zick/
-    main.go         ← root command + execute
-    fresh.go        ← zick fresh command
-    secrets.go      ← zick secrets command
+    main.go         root command + execute
+    fresh.go        zick fresh command
+    scan.go         zick scan command
+    secrets.go      zick secrets command
 internal/
+  config/
+    config.go       .zick.yaml loader
   fresh/
-    npm.go          ← npm registry client + lockfile parsing
-    resolver.go     ← age gate classification
+    npm.go          npm registry client + lockfile parsing
+    resolver.go     age gate classification
   tools/
-    executor.go     ← local → docker fallback resolution
-    betterleaks.go  ← betterleaks integration
+    executor.go     local -> Docker fallback resolution
+    betterleaks.go  betterleaks integration
+    gitleaks.go     gitleaks integration
+    osvscanner.go   osv-scanner integration
+    trivy.go        trivy integration
 ```
-
----
 
 ## License
 

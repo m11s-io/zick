@@ -1,19 +1,23 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/m11s-io/zick/internal/cli"
+	"github.com/m11s-io/zick/internal/config"
 	"github.com/m11s-io/zick/internal/fresh"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 func newFreshCmd() *cobra.Command {
 	var ageDays int
 	var failOn string
 	var includeDev bool
+	var format string
 
 	cmd := &cobra.Command{
 		Use:     "fresh [path]",
@@ -23,7 +27,7 @@ func newFreshCmd() *cobra.Command {
 published within the configured age gate. Helps catch supply chain attacks
 before packages are installed.
 
-Reads package-lock.json (exact versions) or package.json (latest from registry).`,
+Reads bun.lock, package-lock.json (exact versions), or package.json (latest from registry).`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := "."
@@ -31,20 +35,43 @@ Reads package-lock.json (exact versions) or package.json (latest from registry).
 				path = args[0]
 			}
 
+			cfg, err := config.Load(path)
+			if err != nil {
+				return err
+			}
+			if !flagChanged(cmd, "age-gate") && cfg.Fresh.AgeGateDays != nil {
+				ageDays = *cfg.Fresh.AgeGateDays
+			}
+			if !flagChanged(cmd, "include-dev") && cfg.Fresh.IncludeDev != nil {
+				includeDev = *cfg.Fresh.IncludeDev
+			}
+			if !flagChanged(cmd, "fail-on") && cfg.Fresh.FailOn != "" {
+				failOn = cfg.Fresh.FailOn
+			}
+			if !flagChanged(cmd, "format") && cfg.Fresh.Format != "" {
+				format = cfg.Fresh.Format
+			}
+			if err := validateFreshFlags(ageDays, failOn, format); err != nil {
+				return err
+			}
+
 			results, err := fresh.Check(path, fresh.Options{
 				AgeDays:    ageDays,
 				IncludeDev: includeDev,
+				ErrOut:     cmd.ErrOrStderr(),
 			})
 			if err != nil {
 				return err
 			}
 
 			if len(results) == 0 {
-				cmd.Println("No supported manifest found (package-lock.json, package.json).")
+				cmd.Println("No supported manifest found (bun.lock, package-lock.json, package.json).")
 				return nil
 			}
 
-			printFreshTable(cmd, results)
+			if err := printFreshResults(cmd, results, format); err != nil {
+				return err
+			}
 
 			violations := countViolations(results, failOn)
 			if violations > 0 {
@@ -60,8 +87,68 @@ Reads package-lock.json (exact versions) or package.json (latest from registry).
 	cmd.Flags().IntVar(&ageDays, "age-gate", 7, "Flag packages published within this many days")
 	cmd.Flags().StringVar(&failOn, "fail-on", "high", "Exit 1 when this risk level is found (high, warn)")
 	cmd.Flags().BoolVar(&includeDev, "include-dev", false, "Include devDependencies")
+	cmd.Flags().StringVar(&format, "format", "table", "Output format (table, json)")
 
 	return cmd
+}
+
+func flagChanged(cmd *cobra.Command, name string) bool {
+	changed := false
+	cmd.Flags().Visit(func(flag *pflag.Flag) {
+		if flag.Name == name {
+			changed = true
+		}
+	})
+	return changed
+}
+
+func validateFreshFlags(ageDays int, failOn, format string) error {
+	if ageDays <= 0 {
+		return fmt.Errorf("--age-gate must be greater than 0")
+	}
+	switch failOn {
+	case "high", "warn":
+	default:
+		return fmt.Errorf("--fail-on must be one of: high, warn")
+	}
+	switch format {
+	case "table", "json":
+		return nil
+	default:
+		return fmt.Errorf("--format must be one of: table, json")
+	}
+}
+
+func printFreshResults(cmd *cobra.Command, results []fresh.Result, format string) error {
+	if format == "json" {
+		return printFreshJSON(cmd, results)
+	}
+	printFreshTable(cmd, results)
+	return nil
+}
+
+type freshJSONResult struct {
+	Risk      string `json:"risk"`
+	Package   string `json:"package"`
+	Version   string `json:"version"`
+	Published string `json:"published"`
+	Age       string `json:"age"`
+}
+
+func printFreshJSON(cmd *cobra.Command, results []fresh.Result) error {
+	rows := make([]freshJSONResult, 0, len(results))
+	for _, r := range results {
+		rows = append(rows, freshJSONResult{
+			Risk:      riskLabel(r.Risk),
+			Package:   r.Package,
+			Version:   r.Version,
+			Published: r.Published.Format(time.RFC3339),
+			Age:       humanAge(r.Age),
+		})
+	}
+	enc := json.NewEncoder(cmd.OutOrStdout())
+	enc.SetIndent("", "  ")
+	return enc.Encode(rows)
 }
 
 func printFreshTable(cmd *cobra.Command, results []fresh.Result) {

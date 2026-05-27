@@ -102,8 +102,10 @@ func TestParseLock(t *testing.T) {
 		"packages": {
 			"": {},
 			"node_modules/lodash": {"version": "4.17.21", "dev": false},
+			"node_modules/parent/node_modules/left-pad": {"version": "1.3.0", "dev": false},
+			"node_modules/parent/node_modules/@types/node": {"version": "20.0.0", "dev": false},
 			"node_modules/typescript": {"version": "5.4.0", "dev": true},
-			"node_modules/@types/node": {"version": "20.0.0", "dev": true}
+			"node_modules/@types/react": {"version": "19.0.0", "dev": true}
 		}
 	}`
 
@@ -117,8 +119,21 @@ func TestParseLock(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(deps) != 1 || deps[0].name != "lodash" || deps[0].version != "4.17.21" {
-			t.Errorf("unexpected deps: %+v", deps)
+		byName := make(map[string]string, len(deps))
+		for _, d := range deps {
+			byName[d.name] = d.version
+		}
+		if len(deps) != 3 {
+			t.Fatalf("expected 3 prod deps, got %d: %+v", len(deps), deps)
+		}
+		if byName["lodash"] != "4.17.21" {
+			t.Errorf("lodash version = %q, want 4.17.21", byName["lodash"])
+		}
+		if byName["left-pad"] != "1.3.0" {
+			t.Errorf("left-pad version = %q, want 1.3.0", byName["left-pad"])
+		}
+		if byName["@types/node"] != "20.0.0" {
+			t.Errorf("@types/node version = %q, want 20.0.0", byName["@types/node"])
 		}
 	})
 
@@ -127,8 +142,8 @@ func TestParseLock(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(deps) != 3 {
-			t.Errorf("expected 3 deps, got %d: %+v", len(deps), deps)
+		if len(deps) != 5 {
+			t.Errorf("expected 5 deps, got %d: %+v", len(deps), deps)
 		}
 	})
 
@@ -152,6 +167,24 @@ func TestParseLock(t *testing.T) {
 			t.Fatal("expected error for malformed JSON")
 		}
 	})
+}
+
+func TestPackageNameFromLockKey(t *testing.T) {
+	tests := []struct {
+		key  string
+		want string
+	}{
+		{"node_modules/lodash", "lodash"},
+		{"node_modules/@types/node", "@types/node"},
+		{"node_modules/parent/node_modules/left-pad", "left-pad"},
+		{"node_modules/parent/node_modules/@types/node", "@types/node"},
+	}
+
+	for _, tc := range tests {
+		if got := packageNameFromLockKey(tc.key); got != tc.want {
+			t.Errorf("packageNameFromLockKey(%q) = %q, want %q", tc.key, got, tc.want)
+		}
+	}
 }
 
 // TestParsePkg covers package.json parsing.

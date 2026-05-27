@@ -1,6 +1,9 @@
 package fresh
 
-import "time"
+import (
+	"io"
+	"time"
+)
 
 type Risk int
 
@@ -22,6 +25,7 @@ type Options struct {
 	AgeDays     int
 	IncludeDev  bool
 	RegistryURL string // empty → default npm registry; set in tests to inject a mock server
+	ErrOut      io.Writer
 }
 
 func (o Options) baseURL() string {

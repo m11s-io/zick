@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -63,7 +65,20 @@ func Check(path string, opts Options) ([]Result, error) {
 	if len(deps) == 0 {
 		return nil, nil
 	}
-	return fetchAll(deps, opts)
+	results, err := fetchAll(deps, opts)
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].Risk != results[j].Risk {
+			return results[i].Risk > results[j].Risk
+		}
+		if results[i].Package != results[j].Package {
+			return results[i].Package < results[j].Package
+		}
+		return results[i].Version < results[j].Version
+	})
+	return results, nil
 }
 
 // dep is a resolved name → exact version pair.
@@ -163,11 +178,16 @@ func parseLock(path string, includeDev bool) ([]dep, error) {
 			continue
 		}
 		deps = append(deps, dep{
-			name:    strings.TrimPrefix(key, "node_modules/"),
+			name:    packageNameFromLockKey(key),
 			version: pkg.Version,
 		})
 	}
 	return deps, nil
+}
+
+func packageNameFromLockKey(key string) string {
+	parts := strings.Split(key, "node_modules/")
+	return parts[len(parts)-1]
 }
 
 func parsePkg(path string, includeDev bool) ([]dep, error) {
@@ -223,12 +243,19 @@ func fetchAll(deps []dep, opts Options) ([]Result, error) {
 	var results []Result
 	for w := range ch {
 		if w.err != nil {
-			fmt.Fprintf(os.Stderr, "warn: %s: %v\n", w.pkg, w.err)
+			fmt.Fprintf(warnWriter(opts), "warn: %s: %v\n", w.pkg, w.err)
 			continue
 		}
 		results = append(results, w.res)
 	}
 	return results, nil
+}
+
+func warnWriter(opts Options) io.Writer {
+	if opts.ErrOut != nil {
+		return opts.ErrOut
+	}
+	return os.Stderr
 }
 
 func fetchOne(d dep, opts Options) (Result, error) {

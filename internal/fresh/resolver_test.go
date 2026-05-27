@@ -41,10 +41,10 @@ func TestClassifyCustomGate(t *testing.T) {
 		published time.Time
 		want      Risk
 	}{
-		{14, now.Add(-3 * 24 * time.Hour), RiskHigh},  // 3d < 7d (14/2)
-		{14, now.Add(-9 * 24 * time.Hour), RiskWarn},  // 7d ≤ 9d < 14d
-		{14, now.Add(-20 * 24 * time.Hour), RiskOK},   // 20d ≥ 14d
-		{1, now.Add(-30 * time.Minute), RiskHigh},     // <12h with a 1-day gate
+		{14, now.Add(-3 * 24 * time.Hour), RiskHigh}, // 3d < 7d (14/2)
+		{14, now.Add(-9 * 24 * time.Hour), RiskWarn}, // 7d ≤ 9d < 14d
+		{14, now.Add(-20 * 24 * time.Hour), RiskOK},  // 20d ≥ 14d
+		{1, now.Add(-30 * time.Minute), RiskHigh},    // <12h with a 1-day gate
 	}
 
 	for _, tc := range tests {

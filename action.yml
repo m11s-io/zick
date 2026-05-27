@@ -8,7 +8,7 @@ branding:
 
 inputs:
   commands:
-    description: "Comma-separated list of commands to run (fresh, secrets)"
+    description: "Comma-separated list of commands to run (fresh, secrets, scan)"
     default: "fresh,secrets"
     required: false
   age_gate_days:
@@ -19,16 +19,28 @@ inputs:
     description: "Risk level to fail on (high, warn)"
     default: "high"
     required: false
+  fresh_format:
+    description: "Fresh output format (table, json)"
+    default: "table"
+    required: false
   include_dev:
     description: "Include devDependencies in freshness check"
     default: "false"
+    required: false
+  secrets_tool:
+    description: "Secret scanner to use (auto, betterleaks, gitleaks)"
+    default: "auto"
+    required: false
+  scan_tools:
+    description: "Comma-separated scanners to run (osv-scanner, trivy)"
+    default: "osv-scanner,trivy"
     required: false
   path:
     description: "Path to scan"
     default: "."
     required: false
   version:
-    description: "zick version to use (default: latest)"
+    description: "zick version to use (latest, local, or release tag)"
     default: "latest"
     required: false
 
@@ -38,12 +50,22 @@ runs:
     - name: Install zick
       shell: bash
       run: |
+        VERSION="${{ inputs.version }}"
+        if [ "$VERSION" = "local" ]; then
+          INSTALL_DIR="${RUNNER_TEMP}/zick-bin"
+          mkdir -p "$INSTALL_DIR"
+          (cd "${{ github.action_path }}" && go build -o "${INSTALL_DIR}/zick" ./cmd/zick)
+          echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+          export PATH="$INSTALL_DIR:$PATH"
+          zick --version
+          exit 0
+        fi
+
         OS=$(uname -s | tr '[:upper:]' '[:lower:]')
         ARCH=$(uname -m)
         [ "$ARCH" = "x86_64" ] && ARCH="amd64"
         [ "$ARCH" = "aarch64" ] && ARCH="arm64"
 
-        VERSION="${{ inputs.version }}"
         if [ "$VERSION" = "latest" ]; then
           VERSION=$(curl -s https://api.github.com/repos/m11s-io/zick/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
         fi
@@ -62,6 +84,7 @@ runs:
         zick fresh \
           --age-gate "${{ inputs.age_gate_days }}" \
           --fail-on "${{ inputs.fail_on }}" \
+          --format "${{ inputs.fresh_format }}" \
           $DEV_FLAG \
           "${{ inputs.path }}"
 
@@ -69,4 +92,10 @@ runs:
       if: contains(inputs.commands, 'secrets')
       shell: bash
       run: |
-        zick secrets "${{ inputs.path }}"
+        zick secrets --tool "${{ inputs.secrets_tool }}" "${{ inputs.path }}"
+
+    - name: Run zick scan
+      if: contains(inputs.commands, 'scan')
+      shell: bash
+      run: |
+        zick scan --tools "${{ inputs.scan_tools }}" "${{ inputs.path }}"
