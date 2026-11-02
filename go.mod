@@ -1,6 +1,6 @@
 module github.com/m11s-io/zick
 
-go 1.25.0
+go 1.27.3
 
 require (
 	github.com/olekukonko/tablewriter v0.0.5
