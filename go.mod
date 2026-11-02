@@ -1,12 +1,12 @@
 module github.com/m11s-io/zick
 
-go 1.25.0
+go 1.27.3
 
 require (
 	charm.land/fang/v2 v2.0.1
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/olekukonko/tablewriter v0.0.5
-	github.com/spf13/cobra v1.9.1
+	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
 	gopkg.in/yaml.v3 v3.0.1
